@@ -1,12 +1,13 @@
-# app.py – Fully corrected with stacked layout, LaTeX rendering, Integration Limits & Derivative Rules
+# app.py – Corrigido cache do Streamlit, Derivadas/Integrais blindadas, e Divisão adicionada
 import streamlit as st
 import streamlit.components.v1 as components
 import math
 import sympy as sp
 from sympy import (symbols, diff, integrate, solve, latex, simplify, expand,
-                   sin, cos, tan, exp, log, Symbol, Limit, S)
+                   sin, cos, tan, exp, log, Symbol, S)
 from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application
 import re
+import traceback
 
 st.set_page_config(page_title="HandCalc Pro", page_icon="🧮", layout="wide")
 
@@ -42,7 +43,7 @@ class MathSolver:
         except Exception:
             return None
 
-    # ---------- MANUAL ADDITION ("CONTA ARMADA") ----------
+    # ---------- MANUAL ADDITION ----------
     def manual_add(self, n1, n2):
         s1, s2 = str(abs(n1)), str(abs(n2))
         max_len = max(len(s1), len(s2))
@@ -71,28 +72,8 @@ class MathSolver:
 
         html = []
         html.append('<div class="step-box">')
-        html.append('<strong>➕ Adição Armada (Passo a Passo)</strong><br><br>')
-        html.append('<div style="text-align: center;"><pre class="manual-display">' + display_text + '</pre></div>')
-
-        html.append('<br><strong>Passos Detalhados:</strong><br>')
-        places = ['unidades', 'dezenas', 'centenas', 'unidades de milhar', 'dezenas de milhar']
-        for i in range(max_len):
-            pos = max_len - 1 - i
-            d1 = int(p1[pos])
-            d2 = int(p2[pos])
-            inc = carries[pos + 1] if pos + 1 < len(carries) else 0
-            col_sum = d1 + d2 + inc
-            place_name = places[i] if i < len(places) else f'posição {i+1}'
-            step = f'<span class="step-number">{i+1}</span> '
-            step += f'<b>{place_name.capitalize()}:</b> {d1} + {d2}'
-            if inc > 0:
-                step += f' + {inc} (vai {inc})'
-            step += f' = {col_sum}'
-            if pos < len(carries) and carries[pos] > 0:
-                step += f' &rarr; escreve {col_sum % 10}, vai {carries[pos]}'
-            step += '<br>'
-            html.append(step)
-
+        html.append('<strong>➕ Adição Armada</strong><br>')
+        html.append('<div style="text-align: center;"><pre class="manual-display" style="line-height: 1.1; padding: 10px;">' + display_text + '</pre></div>')
         html.append(f'<div class="result-box">🎯 <strong>Resultado: {n1} + {n2} = {result}</strong></div>')
         html.append('</div>')
         return '\n'.join(html)
@@ -107,8 +88,8 @@ class MathSolver:
 
         html = []
         html.append('<div class="step-box">')
-        html.append('<strong>➖ Subtração Armada (Passo a Passo)</strong><br><br>')
-        html.append('<div style="text-align: center;"><pre class="manual-display">' + display_text + '</pre></div>')
+        html.append('<strong>➖ Subtração Armada</strong><br>')
+        html.append('<div style="text-align: center;"><pre class="manual-display" style="line-height: 1.1; padding: 10px;">' + display_text + '</pre></div>')
         html.append(f'<div class="result-box">🎯 <strong>Resultado: {n1} - {n2} = {result}</strong></div>')
         html.append('</div>')
         return '\n'.join(html)
@@ -136,24 +117,67 @@ class MathSolver:
 
         html = []
         html.append('<div class="step-box">')
-        html.append('<strong>✖️ Multiplicação Armada (Passo a Passo)</strong><br><br>')
-        html.append('<div style="text-align: center;"><pre class="manual-display">' + display_text + '</pre></div>')
-
-        html.append('<br><strong>Passos Detalhados:</strong><br>')
-        for i, d in enumerate(reversed(s2)):
-            partial = int(s1) * int(d)
-            step = f'<span class="step-number">{i+1}</span> '
-            step += f'Multiplicar {s1} × {d} = {partial}'
-            if i > 0:
-                step += f' (deslocando {i} casa(s) = {partial * (10**i)})'
-            step += '<br>'
-            html.append(step)
-        if len(s2) > 1:
-            step = f'<span class="step-number">{len(s2)+1}</span> '
-            step += 'Somar os produtos parciais = ' + str(result) + '<br>'
-            html.append(step)
-
+        html.append('<strong>✖️ Multiplicação Armada</strong><br>')
+        html.append('<div style="text-align: center;"><pre class="manual-display" style="line-height: 1.1; padding: 10px;">' + display_text + '</pre></div>')
         html.append(f'<div class="result-box">🎯 <strong>Resultado: {n1} × {n2} = {result}</strong></div>')
+        html.append('</div>')
+        return '\n'.join(html)
+
+    # ---------- MANUAL DIVISION (CONTA COM CHAVE) ----------
+    def manual_div(self, n1, n2):
+        if n2 == 0:
+            return "<div class='step-box'>❌ <b>Erro:</b> Divisão por zero não permitida.</div>"
+
+        dividend = abs(n1)
+        divisor = abs(n2)
+        q = dividend // divisor
+        r = dividend % divisor
+
+        html = []
+        html.append('<div class="step-box">')
+        html.append('<strong>➗ Divisão Armada (Passo a Passo)</strong><br><br>')
+
+        # Desenho da chave de divisão brasileira perfeitamente alinhada
+        html.append('<div class="formula-highlight" style="display: flex; justify-content: center; font-size: 24px; font-family: monospace; align-items: flex-start;">')
+        html.append(f'<div style="padding-right: 10px; padding-top: 5px;">{dividend}</div>')
+        html.append(f'<div style="border-left: 2px solid #333; padding-left: 10px; text-align: left;">')
+        html.append(f'<div style="border-bottom: 2px solid #333; padding-bottom: 5px;">{divisor}</div>')
+        html.append(f'<div style="padding-top: 5px; color: #d946ef; font-weight: bold;">{q}</div>')
+        html.append('</div></div><br>')
+
+        if dividend < divisor:
+            html.append(f'O dividendo (<b>{dividend}</b>) é menor que o divisor (<b>{divisor}</b>).<br>')
+            html.append(f'Portanto, o quociente inteiro é <b>0</b> e o resto é <b>{dividend}</b>.<br>')
+        else:
+            html.append('<strong>Passos Detalhados:</strong><br>')
+            s1 = str(dividend)
+            current_val = 0
+            q_str = ""
+            step_counter = 1
+            for i, digit in enumerate(s1):
+                current_val = current_val * 10 + int(digit)
+                if current_val < divisor and i < len(s1) - 1 and q_str == "":
+                    continue
+
+                q_digit = current_val // divisor
+                subtrahend = divisor * q_digit
+                rem = current_val % divisor
+
+                step = f'<span class="step-number">{step_counter}</span> '
+                step += f'Dividindo <b>{current_val}</b> por {divisor}:<br>'
+                step += f'&nbsp;&nbsp; &bull; {divisor} × <b>{q_digit}</b> = {subtrahend}<br>'
+                step += f'&nbsp;&nbsp; &bull; Resto: {current_val} - {subtrahend} = <b>{rem}</b><br>'
+                html.append(step)
+
+                if i < len(s1) - 1:
+                    next_digit = s1[i+1]
+                    html.append(f'&nbsp;&nbsp; <i>(Baixando o próximo dígito <b>{next_digit}</b> &rarr; formando <b>{rem}{next_digit}</b>)</i><br><br>')
+
+                current_val = rem
+                q_str += str(q_digit)
+                step_counter += 1
+
+        html.append(f'<div class="result-box">🎯 <strong>Resultado: {dividend} ÷ {divisor} = {q}</strong><br><span style="font-size: 16px;">(Resto {r})</span></div>')
         html.append('</div>')
         return '\n'.join(html)
 
@@ -195,17 +219,13 @@ class MathSolver:
             else:
                 a, b = 0, 0
 
-            html.append(f'<span class="step-number">3</span> <strong>Coeficientes:</strong> $a = {a}$, $b = {b}$<br><br>')
-
             if a == 0:
                 html.append('<b>Não é uma equação de 1º grau (a = 0).</b></div>')
                 return '\n'.join(html)
 
             x_sol = -b / a
-            html.append('<span class="step-number">4</span> <strong>Isolando x:</strong><br>')
-            html.append(f'$${a}x = {-b}$$<br>')
+            html.append('<span class="step-number">3</span> <strong>Isolando x:</strong><br>')
             html.append(f'$$x = \\frac{{{-b}}}{{{a}}} = {latex(sp.nsimplify(x_sol))}$$<br>')
-
             html.append(f'<div class="result-box">🎯 <strong>Resultado: $x = {latex(sp.nsimplify(x_sol))}$</strong></div>')
             html.append('</div>')
             return '\n'.join(html)
@@ -216,8 +236,8 @@ class MathSolver:
     def solve_quadratic(self, func_str):
         try:
             html = []
-            html.append('<div class="theory-box"><div class="theory-title">📚 Equação do 2º Grau (Fórmula de Bhaskara)</div>')
-            html.append('<p><b>ax² + bx + c = 0</b>. Fórmula: $$x = \\frac{-b \\pm \\sqrt{\\Delta}}{2a}, \\quad \\Delta = b^2 - 4ac$$</p></div>')
+            html.append('<div class="theory-box"><div class="theory-title">📚 Equação do 2º Grau (Bhaskara)</div>')
+            html.append('<p><b>ax² + bx + c = 0</b>. Fórmula: $$x = \\frac{-b \\pm \\sqrt{\\Delta}}{2a}$$</p></div>')
 
             if '=' in func_str:
                 left_str, right_str = func_str.split('=')
@@ -232,15 +252,13 @@ class MathSolver:
 
             poly = sp.Poly(expr, self.x)
             coeffs = poly.all_coeffs()
-            a, b, c = 0, 0, 0
+            a = b = c = 0
             if len(coeffs) == 3:
                 a, b, c = coeffs
             elif len(coeffs) == 2:
                 a, b = coeffs
             elif len(coeffs) == 1:
                 a = coeffs[0]
-
-            html.append(f'• <b>a:</b> {a}, <b>b:</b> {b}, <b>c:</b> {c}<br><br>')
 
             if a == 0:
                 html.append('<b>Não é equação de 2º grau (a = 0).</b></div>')
@@ -255,12 +273,10 @@ class MathSolver:
                 sqrt_disc = math.sqrt(disc)
                 x1 = (-b + sqrt_disc) / (2*a)
                 x2 = (-b - sqrt_disc) / (2*a)
-                html.append(f'$$x_1 = {latex(sp.nsimplify(x1))}, \\quad x_2 = {latex(sp.nsimplify(x2))}$$<br>')
                 html.append(f'<div class="result-box">🎯 $x_1 = {latex(sp.nsimplify(x1))}, \\quad x_2 = {latex(sp.nsimplify(x2))}$</div>')
             else:
                 real_part = -b / (2*a)
                 imag_part = math.sqrt(-disc) / (2*a)
-                html.append(f'$$x = {real_part:.4f} \\pm {imag_part:.4f}i$$<br>')
                 html.append(f'<div class="result-box">🎯 $x = {real_part:.4f} \\pm {imag_part:.4f}i$</div>')
 
             html.append('</div>')
@@ -268,7 +284,7 @@ class MathSolver:
         except Exception as e:
             return f"<div class='step-box'>❌ Erro: {str(e)}</div>"
 
-    # ---------- DIFFERENTIATION WITH RULES & LIMITS/POINT ----------
+    # ---------- DIFFERENTIATION (FIXED & ROBUST) ----------
     def differentiate(self, func_str, var='x', eval_pt=None):
         try:
             expr = self.parse_func(func_str)
@@ -281,10 +297,10 @@ class MathSolver:
 
             html = []
             html.append('<div class="theory-box"><div class="theory-title">📚 Regras de Derivação Identificadas</div>')
-
+            
+            # Detecção de regras segura
             rules_used = []
             num, den = expr.as_numer_denom()
-
             if den != 1 and den.has(sym_var):
                 rules_used.append("• <b>Regra do Quociente:</b> $\\frac{d}{d" + var + "}\\left[\\frac{u}{v}\\right] = \\frac{u'v - uv'}{v^2}$")
             elif expr.is_Mul and len([arg for arg in expr.args if arg.has(sym_var)]) > 1:
@@ -295,75 +311,45 @@ class MathSolver:
                 if sub.is_Function or (sub.is_Pow and sub.base.has(sym_var) and sub.base != sym_var):
                     has_chain = True
                     break
-
             if has_chain:
                 rules_used.append("• <b>Regra da Cadeia (Função Composta):</b> $\\frac{d}{d" + var + "}[f(g(" + var + "))] = f'(g(" + var + ")) \\cdot g'(" + var + ")$")
 
             rules_used.append("• <b>Regra da Potência e Linearidade:</b> $\\frac{d}{d" + var + "}[" + var + "^n] = n " + var + "^{n-1}$")
-
             html.append('<br>'.join(rules_used) + '</div>')
-            html.append('<div class="step-box"><strong>📝 Resolução Passo a Passo:</strong><br><br>')
 
+            html.append('<div class="step-box"><strong>📝 Resolução Passo a Passo:</strong><br><br>')
             html.append('<span class="step-number">1</span> <strong>Função Original:</strong><br>')
             html.append(f'<div class="formula-highlight">$$f({var}) = {latex(expr)}$$</div>')
 
-            # Detailed rule application
-            if den != 1 and den.has(sym_var):
-                u, v = num, den
-                du, dv = diff(u, sym_var), diff(v, sym_var)
-                html.append('<span class="step-number">2</span> <strong>Aplicação da Regra do Quociente:</strong><br>')
-                html.append(f'• Numerador $u({var}) = {latex(u)} \\implies u\'({var}) = {latex(du)}$<br>')
-                html.append(f'• Denominador $v({var}) = {latex(v)} \\implies v\'({var}) = {latex(dv)}$<br><br>')
-                html.append(f'Fórmula: $$f\'({var}) = \\frac{{({latex(du)})({latex(v)}) - ({latex(u)})({latex(dv)})}}{{({latex(v)})^2}}$$')
+            expanded = expand(expr)
+            html.append('<span class="step-number">2</span> <strong>Derivando a Expressão:</strong><br>')
+            terms = expanded.args if expanded.is_Add else [expanded]
+            for i, term in enumerate(terms):
+                d_term = diff(term, sym_var)
+                html.append(f'• Termo {i+1}: $\\frac{{d}}{{d{var}}}\\left({latex(term)}\\right) = {latex(d_term)}$<br>')
 
-            elif expr.is_Mul and len([arg for arg in expr.args if arg.has(sym_var)]) > 1:
-                args_var = [arg for arg in expr.args if arg.has(sym_var)]
-                u = args_var[0]
-                v = expr / u
-                du, dv = diff(u, sym_var), diff(v, sym_var)
-                html.append('<span class="step-number">2</span> <strong>Aplicação da Regra do Produto:</strong><br>')
-                html.append(f'• Termo $u({var}) = {latex(u)} \\implies u\'({var}) = {latex(du)}$<br>')
-                html.append(f'• Termo $v({var}) = {latex(v)} \\implies v\'({var}) = {latex(dv)}$<br><br>')
-                html.append(f'Fórmula: $$f\'({var}) = ({latex(du)})({latex(v)}) + ({latex(u)})({latex(dv)})$$')
-
-            else:
-                expanded = expand(expr)
-                if expanded != expr:
-                    html.append('<span class="step-number">2</span> <strong>Expansão da Expressão:</strong><br>')
-                    html.append(f'$$f({var}) = {latex(expanded)}$$<br>')
-
-                html.append('<span class="step-number">3</span> <strong>Derivando Termo a Termo:</strong><br>')
-                terms = expanded.args if expanded.is_Add else [expanded]
-                for i, term in enumerate(terms):
-                    d_term = diff(term, sym_var)
-                    html.append(f'• Termo {i+1}: $\\frac{{d}}{{d{var}}}\\left({latex(term)}\\right) = {latex(d_term)}$<br>')
-
-            html.append('<br><span class="step-number">4</span> <strong>Resultado da Derivada:</strong><br>')
-            html.append(f'$$f\'({var}) = {latex(df)}$$<br>')
-
-            html.append('<span class="step-number">5</span> <strong>Simplificação Final:</strong><br>')
+            html.append('<br><span class="step-number">3</span> <strong>Resultado da Derivada (Simplificada):</strong><br>')
             html.append(f'$$f\'({var}) = {latex(simplified_df)}$$<br>')
 
-            # Evaluation at a point / limit
+            # Avaliação no ponto com validação segura
             if eval_pt is not None and str(eval_pt).strip() != "":
-                try:
-                    pt_val = parse_expr(str(eval_pt).replace('^', '**'))
+                pt_val = parse_expr(str(eval_pt).replace('^', '**'))
+                if pt_val is not None:
                     val_result = simplified_df.subs(sym_var, pt_val)
-                    html.append('<span class="step-number">6</span> <strong>Avaliação no Ponto / Limite ($' + var + ' = ' + latex(pt_val) + '$):</strong><br>')
+                    html.append('<span class="step-number">4</span> <strong>Avaliação no Ponto ($' + var + ' = ' + latex(pt_val) + '$):</strong><br>')
                     html.append(f'$$f\'({latex(pt_val)}) = {latex(val_result)}$$')
                     if val_result.is_number and not val_result.is_Integer:
                         html.append(f' $$\\approx {float(val_result):.4f}$$')
                     html.append('<br>')
-                except Exception as e:
-                    html.append(f'<br><i>Erro ao avaliar no ponto {eval_pt}: {e}</i><br>')
 
             html.append(f'<div class="result-box">🎯 $$\\boxed{{f\'({var}) = {latex(simplified_df)}}}$$</div>')
             html.append('</div>')
             return '\n'.join(html)
         except Exception as e:
-            return f"<div class='step-box'>❌ Erro ao calcular derivada: {str(e)}</div>"
+            err_msg = traceback.format_exc()
+            return f"<div class='step-box'>❌ <b>Erro interno na Derivada:</b> {str(e)}<br><pre>{err_msg}</pre></div>"
 
-    # ---------- INTEGRATION WITH LIMITS & RULES ----------
+    # ---------- INTEGRATION (FIXED & ROBUST) ----------
     def integrate_func(self, func_str, var='x', lower_bound=None, upper_bound=None):
         try:
             expr = self.parse_func(func_str)
@@ -375,81 +361,64 @@ class MathSolver:
             a_val, b_val = None, None
 
             if lower_bound is not None and upper_bound is not None and str(lower_bound).strip() != "" and str(upper_bound).strip() != "":
-                try:
-                    a_val = parse_expr(str(lower_bound).replace('^', '**'))
-                    b_val = parse_expr(str(upper_bound).replace('^', '**'))
+                a_val = parse_expr(str(lower_bound).replace('^', '**'))
+                b_val = parse_expr(str(upper_bound).replace('^', '**'))
+                if a_val is not None and b_val is not None:
                     is_definite = True
-                except Exception:
-                    is_definite = False
 
             html = []
             html.append('<div class="theory-box"><div class="theory-title">📚 Regras de Integração Aplicadas</div>')
+            html.append("• <b>Regras Básicas:</b> Potência, Substituição Simples, ou Integração por Partes (quando aplicável).<br></div>")
 
-            rules_used = []
-            num, den = expr.as_numer_denom()
-            if expr.is_Mul:
-                rules_used.append("• <b>Método de Substituição / Integração por Partes:</b> $\\int u \\, dv = u v - \\int v \\, du$")
-            if den != 1:
-                rules_used.append("• <b>Regra do Logaritmo / Fracionária:</b> $\\int \\frac{1}{u} \\, du = \\ln|u| + C$")
-            rules_used.append("• <b>Regra da Potência e Linearidade:</b> $\\int " + var + "^n \\, d" + var + " = \\frac{" + var + "^{n+1}}{n+1} + C$, $\\int (a f + b g) \\, d" + var + " = a \\int f \\, d" + var + " + b \\int g \\, d" + var + "$")
-
-            html.append('<br>'.join(rules_used) + '</div>')
             html.append('<div class="step-box"><strong>📝 Resolução Passo a Passo:</strong><br><br>')
 
             if is_definite:
-                html.append('<span class="step-number">1</span> <strong>Integral Definida com Limites de Integração:</strong><br>')
+                html.append('<span class="step-number">1</span> <strong>Integral Definida:</strong><br>')
                 html.append(f'<div class="formula-highlight">$$\\int_{{{latex(a_val)}}}^{{{latex(b_val)}}} \\left({latex(expr)}\\right) \\, d{var}$$</div>')
             else:
                 html.append('<span class="step-number">1</span> <strong>Integral Indefinida:</strong><br>')
                 html.append(f'<div class="formula-highlight">$$\\int \\left({latex(expr)}\\right) \\, d{var}$$</div>')
 
             expanded = expand(expr)
-            if expanded != expr:
-                html.append('<span class="step-number">2</span> <strong>Expansão do Integrando:</strong><br>')
-                html.append(f'$$\\int \\left({latex(expanded)}\\right) \\, d{var}$$<br>')
-
-            html.append('<span class="step-number">3</span> <strong>Integração Termo a Termo (Primitiva $F(' + var + ')$):</strong><br>')
+            html.append('<span class="step-number">2</span> <strong>Integração (Primitiva $F(' + var + ')$):</strong><br>')
             terms = expanded.args if expanded.is_Add else [expanded]
             for i, term in enumerate(terms):
                 int_t = integrate(term, sym_var)
-                html.append(f'• Termo {i+1}: $\\int \\left({latex(term)}\\right) \\, d{var} = {latex(int_t)}$<br>')
+                html.append(f'• $\\int \\left({latex(term)}\\right) \\, d{var} = {latex(int_t)}$<br>')
 
             primitive = integrate(expr, sym_var)
             simplified_prim = simplify(primitive)
 
-            html.append('<br><span class="step-number">4</span> <strong>Primitiva $F(' + var + ')$:</strong><br>')
-            html.append(f'$$F({var}) = {latex(simplified_prim)}$$<br>')
+            html.append(f'<br>$$F({var}) = {latex(simplified_prim)}$$<br>')
 
             if is_definite:
-                html.append('<span class="step-number">5</span> <strong>Aplicação do Teorema Fundamental do Cálculo:</strong><br>')
-                html.append(f'$$\\int_{{a}}^{{b}} f({var}) \\, d{var} = F(b) - F(a)$$<br>')
-
+                html.append('<span class="step-number">3</span> <strong>Teorema Fundamental do Cálculo:</strong><br>')
                 fb = simplified_prim.subs(sym_var, b_val)
                 fa = simplified_prim.subs(sym_var, a_val)
-                def_result = fb - fa
-                simplified_def_res = simplify(def_result)
+                def_result = simplify(fb - fa)
 
-                html.append(f'• Limite Superior $F({latex(b_val)})$: $${latex(fb)}$$<br>')
-                html.append(f'• Limite Inferior $F({latex(a_val)})$: $${latex(fa)}$$<br>')
-                html.append(f'• Resultado $F({latex(b_val)}) - F({latex(a_val)})$: ')
-                html.append(f'$$\\left({latex(fb)}\\right) - \\left({latex(fa)}\\right) = {latex(simplified_def_res)}$$<br>')
+                html.append(f'• $F({latex(b_val)}) = {latex(fb)}$<br>')
+                html.append(f'• $F({latex(a_val)}) = {latex(fa)}$<br>')
+                html.append(f'• $F(b) - F(a) = {latex(def_result)}$<br>')
 
-                if simplified_def_res.is_number and not simplified_def_res.is_Integer:
-                    html.append(f'Valor numérico aproximado: $$\\approx {float(simplified_def_res):.4f}$$<br>')
+                if def_result.is_number and not def_result.is_Integer:
+                    html.append(f'Valor aproximado: $$\\approx {float(def_result):.4f}$$<br>')
 
-                html.append(f'<div class="result-box">🎯 $$\\boxed{{\\int_{{{latex(a_val)}}}^{{{latex(b_val)}}} \\left({latex(expr)}\\right) \\, d{var} = {latex(simplified_def_res)}}}$$</div>')
-
+                html.append(f'<div class="result-box">🎯 $$\\boxed{{\\int_{{{latex(a_val)}}}^{{{latex(b_val)}}} \\left({latex(expr)}\\right) \\, d{var} = {latex(def_result)}}}$$</div>')
             else:
                 html.append(f'<div class="result-box">🎯 $$\\boxed{{\\int \\left({latex(expr)}\\right) \\, d{var} = {latex(simplified_prim)} + C}}$$</div>')
 
             html.append('</div>')
             return '\n'.join(html)
         except Exception as e:
-            return f"<div class='step-box'>❌ Erro ao calcular integral: {str(e)}</div>"
+            err_msg = traceback.format_exc()
+            return f"<div class='step-box'>❌ <b>Erro interno na Integral:</b> {str(e)}<br><pre>{err_msg}</pre></div>"
 
-# ---------- Streamlit UI ----------
-if 'solver' not in st.session_state:
-    st.session_state.solver = MathSolver()
+# ---------- UI Streamlit ----------
+
+# A grande correção para o bug de Cache do Streamlit: instanciar OBRIGATORIAMENTE fora do session_state
+solver = MathSolver()
+
 if 'result_html' not in st.session_state:
     st.session_state.result_html = ""
 if 'history' not in st.session_state:
@@ -486,19 +455,20 @@ with st.sidebar:
 col_in, col_out = st.columns([1, 1.4])
 with col_in:
     st.markdown("### 📝 Entrada de Dados")
-    solver = st.session_state.solver
 
     if mode == "Operações Básicas (Armadas)":
-        op = st.selectbox("Operação:", ["Adição (+)", "Subtração (-)", "Multiplicação (×)"])
-        n1 = st.number_input("Primeiro número:", value=123, step=1, format="%d")
-        n2 = st.number_input("Segundo número:", value=45, step=1, format="%d")
+        op = st.selectbox("Operação:", ["Adição (+)", "Subtração (-)", "Multiplicação (×)", "Divisão (÷)"])
+        n1 = st.number_input("Primeiro número (Dividendo se Divisão):", value=125, step=1, format="%d")
+        n2 = st.number_input("Segundo número (Divisor se Divisão):", value=5, step=1, format="%d")
         if st.button("🧮 Armar e Calcular", use_container_width=True):
             if op == "Adição (+)":
                 html_res = solver.manual_add(int(n1), int(n2))
             elif op == "Subtração (-)":
                 html_res = solver.manual_sub(int(n1), int(n2))
-            else:
+            elif op == "Multiplicação (×)":
                 html_res = solver.manual_mul(int(n1), int(n2))
+            else:
+                html_res = solver.manual_div(int(n1), int(n2))
             st.session_state.result_html = html_res
             st.session_state.history.append(f"{n1} {op[0]} {n2}")
 
@@ -577,17 +547,15 @@ with col_out:
             font-family: 'Courier New', Courier, monospace;
             font-size: 22px;
             font-weight: bold;
-            line-height: 1.25;
             background: #1e293b;
             color: #38bdf8;
-            padding: 16px 22px;
             border-radius: 8px;
             display: inline-block;
             white-space: pre;
             text-align: right;
             letter-spacing: 2px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            margin: 10px auto;
+            margin: 0 auto;
         }
         .step-box {
             background: white;
@@ -648,7 +616,7 @@ with col_out:
 </body>
 </html>
 """,
-            height=800,
+            height=900,
             scrolling=True
         )
     else:

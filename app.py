@@ -1,4 +1,4 @@
-# app.py – Fully corrected, division fixed, session state refresh for solver, '+' sign in multiplication
+# app.py – Fully corrected, integration string mismatch fixed, session state refresh for solver, '+' sign in multiplication
 import streamlit as st
 import streamlit.components.v1 as components
 import math
@@ -193,7 +193,7 @@ class MathSolver:
             html.append('<p><b>ax² + bx + c = 0</b></p></div>')
 
             if '=' in func_str:
-                left_str, right_str = eq_str = func_str.split('=') if '=' in func_str else (func_str, '')
+                left_str, right_str = func_str.split('=') if '=' in func_str else (func_str, '')
                 expr = expand(self.parse_func(left_str) - self.parse_func(right_str))
             else:
                 expr = expand(self.parse_func(func_str))
@@ -398,7 +398,7 @@ with col_in:
             st.session_state.result_html = html_res
             st.session_state.history.append(f"Derivative: f({var}) = {func}")
 
-    elif mode == "Integration (Definite/Indefinida)":
+    elif mode == "Integration (Definite/Indefinite)":
         func = st.text_input("Function f(x) (e.g., x^2 + 3x):", "x^2 + 3x")
         var = st.selectbox("Variable:", ["x", "y", "z"])
         use_limits = st.checkbox("Definite Integral (with integration limits)")

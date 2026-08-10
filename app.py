@@ -1,972 +1,640 @@
-# app.py - UPDATED with elegant manual calculation display
+# app.py - Complete version with LaTeX styling
 import streamlit as st
 import streamlit.components.v1 as components
 import math
-from typing import List, Tuple
+import sympy as sp
+from sympy import symbols, diff, integrate, solve, latex, simplify, expand, factor
+from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application
 import plotly.graph_objects as go
+from typing import List, Tuple
+import re
 
 # Page configuration
 st.set_page_config(
-    page_title="HandCalc Pro - Manual Arithmetic Visualizer",
+    page_title="HandCalc Pro - LaTeX Manual Arithmetic Visualizer",
     page_icon="🧮",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS
+# Custom CSS for elegant styling
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Cormorant+Garamond:wght@400;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Source+Code+Pro:wght@400;600&display=swap');
+    
+    .main-title {
+        font-family: 'Playfair Display', serif;
+        font-size: 52px;
+        font-weight: 700;
+        text-align: center;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 10px;
+    }
+    
+    .subtitle {
+        font-family: 'Playfair Display', serif;
+        text-align: center;
+        color: #888;
+        font-size: 16px;
+        margin-bottom: 30px;
+    }
+    
+    .manual-calc-container {
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        border-radius: 20px;
+        padding: 30px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.1);
+        margin: 20px 0;
+        font-family: 'Latin Modern Math', 'Computer Modern', 'Times New Roman', serif;
+    }
+    
+    .calc-line {
+        font-family: 'Latin Modern Math', 'Computer Modern', monospace;
+        font-size: 24px;
+        padding: 5px 10px;
+        line-height: 1.6;
+        letter-spacing: 1px;
+    }
+    
+    .operation-sign {
+        color: #667eea;
+        font-weight: bold;
+    }
+    
+    .result-line {
+        border-top: 3px solid #333;
+        margin-top: 10px;
+        padding-top: 10px;
+        font-weight: bold;
+        color: #764ba2;
+    }
+    
+    .carry-number {
+        color: #f093fb;
+        font-size: 18px;
+        font-weight: bold;
+        position: relative;
+        top: -10px;
+    }
+    
+    .step-number {
+        color: #667eea;
+        font-weight: bold;
+        margin-right: 10px;
+    }
+    
+    .math-display {
+        background: white;
+        border-radius: 15px;
+        padding: 20px;
+        margin: 15px 0;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+        border-left: 4px solid #667eea;
+    }
+    
+    .function-input {
+        background: white;
+        border: 2px solid #e0e0e0;
+        border-radius: 10px;
+        padding: 15px;
+        font-family: 'Courier New', monospace;
+        font-size: 18px;
+        transition: border-color 0.3s;
+    }
+    
+    .function-input:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 10px rgba(102, 126, 234, 0.2);
+    }
+    
+    .section-title {
+        font-family: 'Playfair Display', serif;
+        font-size: 24px;
+        font-weight: 700;
+        color: #333;
+        margin: 20px 0 10px 0;
+        border-bottom: 2px solid #667eea;
+        padding-bottom: 5px;
+    }
+    
+    .history-item {
+        background: white;
+        border-radius: 8px;
+        padding: 10px;
+        margin: 5px 0;
+        border-left: 3px solid #764ba2;
+        font-family: 'Courier New', monospace;
+        font-size: 14px;
+    }
     
     .stButton > button {
         width: 100%;
-        height: 60px;
-        font-size: 20px;
-        font-weight: bold;
+        height: 55px;
+        font-size: 18px;
+        font-weight: 600;
         border-radius: 15px;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
         border: none;
         transition: all 0.3s ease;
-        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        letter-spacing: 1px;
     }
+    
     .stButton > button:hover {
         transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
     }
     
-    .number-display {
-        font-size: 42px;
-        font-family: 'Playfair Display', serif;
-        padding: 25px;
-        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-        border-radius: 20px;
-        text-align: right;
-        color: #e94560;
-        margin: 10px 0;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-        border: 2px solid rgba(233, 69, 96, 0.3);
-        letter-spacing: 2px;
-    }
-    
-    .manual-calc-container {
-        background: linear-gradient(145deg, #0f0c29, #302b63, #24243e);
-        border-radius: 25px;
-        padding: 40px;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        position: relative;
-        overflow: hidden;
-    }
-    
-    .manual-calc-container::before {
-        content: '';
-        position: absolute;
-        top: -50%;
-        left: -50%;
-        width: 200%;
-        height: 200%;
-        background: radial-gradient(circle, rgba(233, 69, 96, 0.1) 0%, transparent 70%);
-        animation: rotate 20s linear infinite;
-    }
-    
-    @keyframes rotate {
-        100% { transform: rotate(360deg); }
-    }
-    
-    .manual-calc-title {
-        font-family: 'Playfair Display', serif;
-        font-size: 36px;
-        color: #e94560;
-        text-align: center;
-        margin-bottom: 30px;
-        text-shadow: 0 0 20px rgba(233, 69, 96, 0.5);
-        letter-spacing: 3px;
-        position: relative;
-        z-index: 1;
-    }
-    
-    .calculation-lines {
-        font-family: 'Cormorant Garamond', serif;
-        font-size: 28px;
-        color: #ffffff;
-        line-height: 1.8;
-        text-align: right;
-        padding: 30px;
-        background: rgba(0, 0, 0, 0.4);
-        border-radius: 20px;
-        border: 1px solid rgba(233, 69, 96, 0.2);
-        position: relative;
-        z-index: 1;
-        letter-spacing: 1px;
-        backdrop-filter: blur(10px);
-    }
-    
-    .calculation-line {
-        padding: 5px 15px;
-        transition: all 0.3s ease;
-        border-radius: 5px;
-    }
-    
-    .calculation-line:hover {
-        background: rgba(233, 69, 96, 0.1);
-    }
-    
-    .operator-symbol {
-        color: #e94560;
-        font-weight: 700;
-        font-size: 32px;
-    }
-    
-    .result-line {
-        color: #4ade80;
-        font-weight: 700;
-        font-size: 34px;
-        text-shadow: 0 0 10px rgba(74, 222, 128, 0.3);
-    }
-    
-    .separator-line {
-        color: rgba(233, 69, 96, 0.6);
-        letter-spacing: 2px;
-    }
-    
-    .step-number {
-        color: #e94560;
-        font-size: 18px;
-        font-weight: bold;
-        margin-right: 10px;
-    }
-    
-    .carry-number {
-        color: #fbbf24;
-        font-size: 24px;
-        font-style: italic;
-    }
-    
-    .title {
-        text-align: center;
-        background: linear-gradient(135deg, #667eea 0%, #e94560 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        font-size: 56px;
-        font-weight: bold;
-        font-family: 'Playfair Display', serif;
-        text-shadow: none;
-        margin-bottom: 10px;
-    }
-    
-    .subtitle {
-        text-align: center;
-        color: rgba(255, 255, 255, 0.6);
-        font-size: 18px;
-        font-family: 'Cormorant Garamond', serif;
-        font-style: italic;
-    }
-    
-    /* Elegant input fields */
-    .stTextInput > div > div > input {
-        font-family: 'Cormorant Garamond', serif;
-        font-size: 24px;
-        background: rgba(255, 255, 255, 0.05);
-        border: 2px solid rgba(233, 69, 96, 0.3);
-        border-radius: 15px;
-        color: white;
-        padding: 15px;
-        transition: all 0.3s ease;
-    }
-    
-    .stTextInput > div > div > input:focus {
-        border-color: #e94560;
-        box-shadow: 0 0 20px rgba(233, 69, 96, 0.3);
-        background: rgba(255, 255, 255, 0.1);
-    }
-    
-    /* Sidebar styling */
-    .css-1d391kg {
-        background: linear-gradient(180deg, #0f0c29 0%, #302b63 100%);
-    }
-    
-    section[data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #0f0c29 0%, #302b63 100%);
-    }
-    
-    /* Radio buttons */
-    .stRadio > div {
-        background: rgba(0, 0, 0, 0.3);
-        border-radius: 15px;
-        padding: 15px;
-    }
-    
-    .stRadio [data-testid="stMarkdownContainer"] p {
-        color: white;
-        font-family: 'Cormorant Garamond', serif;
+    .latex-render {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
         font-size: 20px;
+        text-align: center;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.05);
     }
 </style>
 """, unsafe_allow_html=True)
 
-class LongArithmeticCalculator:
-    def __init__(self):
-        self.steps = []
+class ManualArithmetic:
+    """Handles manual arithmetic display with LaTeX-style formatting"""
     
-    def _create_separator(self, length: int) -> str:
-        return "─" * length
+    @staticmethod
+    def add_manual(num1: int, num2: int) -> str:
+        """Generate manual addition display"""
+        str1, str2 = str(num1), str(num2)
+        max_len = max(len(str1), len(str2))
+        result = num1 + num2
+        result_str = str(result)
+        
+        # Calculate carries
+        carries = []
+        carry = 0
+        str1_padded = str1.zfill(max_len)
+        str2_padded = str2.zfill(max_len)
+        
+        for i in range(max_len - 1, -1, -1):
+            digit_sum = int(str1_padded[i]) + int(str2_padded[i]) + carry
+            carries.insert(0, digit_sum // 10)
+            carry = digit_sum // 10
+        
+        # Build HTML
+        html = '<div class="manual-calc-container">'
+        html += '<div class="section-title">➕ Addition - Step by Step</div>'
+        
+        # Show carries if any exist
+        if any(c > 0 for c in carries):
+            carry_str = ' '.join(str(c) if c > 0 else ' ' for c in carries)
+            html += f'<div class="calc-line carry-number" style="text-align:right; padding-right:20px;">{carry_str}</div>'
+        
+        # Main numbers
+        total_width = max_len + 4
+        html += f'<div class="calc-line" style="text-align:right;">{"&nbsp;" * (total_width - len(str1))}{str1}</div>'
+        html += f'<div class="calc-line operation-sign" style="text-align:right;">+ {"&nbsp;" * (total_width - len(str2) - 2)}{str2}</div>'
+        html += f'<div class="calc-line" style="text-align:right;">{"─" * (total_width * 12)}</div>'
+        html += f'<div class="calc-line result-line" style="text-align:right; color:#764ba2;">{"&nbsp;" * (total_width - len(result_str))}{result_str}</div>'
+        
+        # Explanation
+        html += '<div class="math-display">'
+        html += f'<strong>Step 1:</strong> Add units: {str1[-1]} + {str2[-1]} = {int(str1[-1]) + int(str2[-1])}'
+        if len(str1) > 1 and len(str2) > 1:
+            html += f'<br><strong>Step 2:</strong> Add tens: {str1[-2] if len(str1) > 1 else "0"} + {str2[-2] if len(str2) > 1 else "0"} = {int(str1[-2]) if len(str1) > 1 else 0 + int(str2[-2]) if len(str2) > 1 else 0}'
+        html += f'<br><strong>Result:</strong> {num1} + {num2} = {result}'
+        html += '</div></div>'
+        
+        return html
     
-    def _format_number(self, num: float) -> str:
-        if num == int(num):
-            return str(int(num))
-        formatted = f"{num:.6f}"
-        formatted = formatted.rstrip('0').rstrip('.') if '.' in formatted else formatted
-        return formatted
+    @staticmethod
+    def subtract_manual(num1: int, num2: int) -> str:
+        """Generate manual subtraction display"""
+        str1, str2 = str(num1), str(num2)
+        max_len = max(len(str1), len(str2))
+        result = num1 - num2
+        result_str = str(result)
+        
+        html = '<div class="manual-calc-container">'
+        html += '<div class="section-title">➖ Subtraction - Step by Step</div>'
+        
+        total_width = max_len + 4
+        html += f'<div class="calc-line" style="text-align:right;">{"&nbsp;" * (total_width - len(str1))}{str1}</div>'
+        html += f'<div class="calc-line operation-sign" style="text-align:right;">− {"&nbsp;" * (total_width - len(str2) - 2)}{str2}</div>'
+        html += f'<div class="calc-line" style="text-align:right;">{"─" * (total_width * 12)}</div>'
+        html += f'<div class="calc-line result-line" style="text-align:right; color:#764ba2;">{"&nbsp;" * (total_width - len(result_str))}{result_str}</div>'
+        
+        html += '<div class="math-display">'
+        html += f'<strong>Explanation:</strong> Subtracting {num2} from {num1}<br>'
+        html += f'<strong>Result:</strong> {num1} - {num2} = {result}'
+        html += '</div></div>'
+        
+        return html
     
-    def add(self, a: str, b: str) -> str:
-        self.steps = []
-        try:
-            num1 = float(a)
-            num2 = float(b)
-            result = num1 + num2
-            
-            if num1 == int(num1) and num2 == int(num2):
-                int1, int2 = int(num1), int(num2)
-                str1, str2 = str(int1), str(int2)
-                
-                max_len = max(len(str1), len(str2))
-                str1 = str1.zfill(max_len)
-                str2 = str2.zfill(max_len)
-                
-                # Calculate carries
-                carries = []
-                carry = 0
-                for i in range(max_len - 1, -1, -1):
-                    d1 = int(str1[i])
-                    d2 = int(str2[i])
-                    sum_d = d1 + d2 + carry
-                    carries.insert(0, sum_d // 10)
-                    carry = sum_d // 10
-                
-                result_str = str(int(result))
-                total_width = max(max_len, len(result_str)) + 4
-                
-                formatted_steps = []
-                
-                # Show carries if any exist
-                if any(carries):
-                    carry_display = " ".join(str(c) if c > 0 else " " for c in carries)
-                    formatted_steps.append({
-                        'text': carry_display,
-                        'type': 'carry',
-                        'align': 'right'
-                    })
-                
-                # First number
-                formatted_steps.append({
-                    'text': " ".join(str1),
-                    'type': 'number',
-                    'align': 'right'
-                })
-                
-                # Operator and second number
-                formatted_steps.append({
-                    'text': "+ " + " ".join(str2),
-                    'type': 'operation',
-                    'align': 'right'
-                })
-                
-                # Separator
-                formatted_steps.append({
-                    'text': self._create_separator(max(len(str1), len(str2)) * 2 + 2),
-                    'type': 'separator',
-                    'align': 'right'
-                })
-                
-                # Result
-                formatted_steps.append({
-                    'text': " ".join(result_str),
-                    'type': 'result',
-                    'align': 'right'
-                })
-                
-                self.steps = formatted_steps
+    @staticmethod
+    def multiply_manual(num1: int, num2: int) -> str:
+        """Generate manual long multiplication display"""
+        str1, str2 = str(num1), str(num2)
+        result = num1 * num2
+        
+        html = '<div class="manual-calc-container">'
+        html += '<div class="section-title">✖️ Long Multiplication</div>'
+        
+        # Calculate partial products
+        partial_products = []
+        str2_reversed = str2[::-1]
+        
+        for i, digit in enumerate(str2_reversed):
+            partial = num1 * int(digit) * (10 ** i)
+            partial_products.append(partial)
+        
+        # Build display
+        max_width = max(len(str1), len(str2) + 1) + 4
+        result_str = str(result)
+        
+        html += f'<div class="calc-line" style="text-align:right;">{"&nbsp;" * (max_width - len(str1))}{str1}</div>'
+        html += f'<div class="calc-line operation-sign" style="text-align:right;">× {"&nbsp;" * (max_width - len(str2) - 2)}{str2}</div>'
+        html += f'<div class="calc-line" style="text-align:right;">{"─" * (max_width * 12)}</div>'
+        
+        # Show partial products
+        partial_products.reverse()
+        for i, partial in enumerate(partial_products):
+            pp_str = str(partial)
+            if i == 0:
+                html += f'<div class="calc-line" style="text-align:right;">{"&nbsp;" * (max_width - len(pp_str))}{pp_str}</div>'
             else:
-                self.steps = [{'text': f"{a} + {b} = {self._format_number(result)}", 'type': 'simple', 'align': 'center'}]
-            
-            return self._format_number(result)
-        except:
-            return "Error"
+                html += f'<div class="calc-line operation-sign" style="text-align:right;">+ {"&nbsp;" * (max_width - len(pp_str) - 2)}{pp_str}</div>'
+        
+        html += f'<div class="calc-line" style="text-align:right;">{"─" * (max_width * 12)}</div>'
+        html += f'<div class="calc-line result-line" style="text-align:right; color:#764ba2;">{"&nbsp;" * (max_width - len(result_str))}{result_str}</div>'
+        
+        # Explanation
+        html += '<div class="math-display">'
+        html += f'<strong>Step 1:</strong> Multiply {num1} × {str2[-1]} = {partial_products[-1]}<br>'
+        if len(str2) > 1:
+            html += f'<strong>Step 2:</strong> Multiply {num1} × {str2[-2]}0 = {partial_products[-2] if len(partial_products) > 1 else ""}<br>'
+        html += f'<strong>Step 3:</strong> Add partial products: {result}'
+        html += '</div></div>'
+        
+        return html
     
-    def subtract(self, a: str, b: str) -> str:
-        self.steps = []
-        try:
-            num1 = float(a)
-            num2 = float(b)
-            result = num1 - num2
-            
-            if num1 == int(num1) and num2 == int(num2):
-                int1, int2 = int(num1), int(num2)
-                str1, str2 = str(int1), str(int2)
-                
-                max_len = max(len(str1), len(str2))
-                str1 = str1.zfill(max_len)
-                str2 = str2.zfill(max_len)
-                
-                result_str = str(int(result)).zfill(max_len)
-                
-                formatted_steps = []
-                
-                # First number
-                formatted_steps.append({
-                    'text': " ".join(str1),
-                    'type': 'number',
-                    'align': 'right'
-                })
-                
-                # Operator and second number
-                formatted_steps.append({
-                    'text': "- " + " ".join(str2),
-                    'type': 'operation',
-                    'align': 'right'
-                })
-                
-                # Separator
-                formatted_steps.append({
-                    'text': self._create_separator(max(len(str1), len(str2)) * 2 + 2),
-                    'type': 'separator',
-                    'align': 'right'
-                })
-                
-                # Result
-                formatted_steps.append({
-                    'text': " ".join(result_str),
-                    'type': 'result',
-                    'align': 'right'
-                })
-                
-                self.steps = formatted_steps
-            else:
-                self.steps = [{'text': f"{a} - {b} = {self._format_number(result)}", 'type': 'simple', 'align': 'center'}]
-            
-            return self._format_number(result)
-        except:
-            return "Error"
-    
-    def multiply(self, a: str, b: str) -> str:
-        self.steps = []
-        try:
-            num1 = float(a)
-            num2 = float(b)
-            result = num1 * num2
-            
-            if num1 == int(num1) and num2 == int(num2) and num1 != 0 and num2 != 0:
-                int1, int2 = int(num1), int(num2)
-                str1, str2 = str(int1), str(int2)
-                
-                # Calculate partial products
-                partial_products = []
-                for i, digit in enumerate(reversed(str2)):
-                    partial = int1 * int(digit)
-                    partial_products.append((partial, i))
-                
-                result_str = str(int(result))
-                max_width = max(len(str1), len(str2) + 1)
-                
-                formatted_steps = []
-                
-                # Show carries for multiplication
-                formatted_steps.append({
-                    'text': f"({len(str2)})",
-                    'type': 'carry',
-                    'align': 'right'
-                })
-                
-                # First number
-                formatted_steps.append({
-                    'text': "  " + "  ".join(str1),
-                    'type': 'number',
-                    'align': 'right'
-                })
-                
-                # Operator and second number
-                formatted_steps.append({
-                    'text': "× " + "  ".join(str2),
-                    'type': 'operation',
-                    'align': 'right'
-                })
-                
-                # Separator
-                formatted_steps.append({
-                    'text': self._create_separator(max(len(str1), len(str2)) * 3 + 2),
-                    'type': 'separator',
-                    'align': 'right'
-                })
-                
-                # Partial products
-                for partial, shift in reversed(partial_products):
-                    partial_str = str(partial)
-                    if shift == 0:
-                        formatted_steps.append({
-                            'text': "  " + "  ".join(partial_str),
-                            'type': 'partial',
-                            'align': 'right'
-                        })
-                    else:
-                        # Add zeros for shift
-                        shifted = partial_str + "0" * shift
-                        formatted_steps.append({
-                            'text': "+ " + "  ".join(shifted),
-                            'type': 'partial_sum',
-                            'align': 'right'
-                        })
-                
-                # Final separator
-                formatted_steps.append({
-                    'text': self._create_separator(max_width * 3 + 2),
-                    'type': 'separator',
-                    'align': 'right'
-                })
-                
-                # Result
-                formatted_steps.append({
-                    'text': "  " + "  ".join(result_str),
-                    'type': 'result',
-                    'align': 'right'
-                })
-                
-                self.steps = formatted_steps
-            else:
-                self.steps = [{'text': f"{a} × {b} = {self._format_number(result)}", 'type': 'simple', 'align': 'center'}]
-            
-            return self._format_number(result)
-        except:
-            return "Error"
-    
-    def divide(self, a: str, b: str) -> str:
-        self.steps = []
-        try:
-            num1 = float(a)
-            num2 = float(b)
-            
-            if num2 == 0:
-                self.steps = [{'text': "Error: Division by zero!", 'type': 'error', 'align': 'center'}]
-                return "Error"
-            
-            result = num1 / num2
-            result_str = self._format_number(result)
-            
-            if num1 == int(num1) and num2 == int(num2) and num1 >= num2:
-                dividend = int(num1)
-                divisor = int(num2)
-                quotient = dividend // divisor
-                remainder = dividend % divisor
-                
-                formatted_steps = []
-                
-                formatted_steps.append({
-                    'text': f"    {quotient}",
-                    'type': 'result',
-                    'align': 'left'
-                })
-                formatted_steps.append({
-                    'text': f"{divisor} ) {dividend}",
-                    'type': 'number',
-                    'align': 'left'
-                })
-                formatted_steps.append({
-                    'text': f"    {divisor * quotient}",
-                    'type': 'partial',
-                    'align': 'left'
-                })
-                formatted_steps.append({
-                    'text': "    " + self._create_separator(len(str(dividend))),
-                    'type': 'separator',
-                    'align': 'left'
-                })
-                formatted_steps.append({
-                    'text': f"    {remainder}",
-                    'type': 'partial_sum',
-                    'align': 'left'
-                })
-                
-                self.steps = formatted_steps
-            else:
-                self.steps = [{'text': f"{a} ÷ {b} = {result_str}", 'type': 'simple', 'align': 'center'}]
-            
-            return result_str
-        except:
-            return "Error"
-    
-    def square_root(self, num: str) -> str:
-        self.steps = []
-        try:
-            value = float(num)
-            if value < 0:
-                self.steps = [{'text': "Error: Cannot calculate square root of negative number!", 'type': 'error', 'align': 'center'}]
-                return "Error"
-            
-            result = math.sqrt(value)
-            result_str = self._format_number(result)
-            
-            formatted_steps = []
-            formatted_steps.append({
-                'text': f"√{num} = {result_str}",
-                'type': 'result',
-                'align': 'center'
-            })
-            formatted_steps.append({
-                'text': "",
-                'type': 'empty',
-                'align': 'center'
-            })
-            formatted_steps.append({
-                'text': "Newton's Method:",
-                'type': 'title',
-                'align': 'center'
-            })
-            
-            if value > 0:
-                x0 = value / 2
-                formatted_steps.append({
-                    'text': f"x₀ = {self._format_number(x0)}",
-                    'type': 'step',
-                    'align': 'center'
-                })
-                
-                for i in range(1, 4):
-                    x1 = (x0 + value / x0) / 2
-                    formatted_steps.append({
-                        'text': f"x{i} = ({self._format_number(x0)} + {num}/{self._format_number(x0)})/2 = {self._format_number(x1)}",
-                        'type': 'step',
-                        'align': 'center'
-                    })
-                    x0 = x1
-            
-            self.steps = formatted_steps
-            return result_str
-        except:
-            return "Error"
-    
-    def cube_root(self, num: str) -> str:
-        self.steps = []
-        try:
-            value = float(num)
-            result = value ** (1/3)
-            result_str = self._format_number(result)
-            
-            formatted_steps = []
-            formatted_steps.append({
-                'text': f"∛{num} = {result_str}",
-                'type': 'result',
-                'align': 'center'
-            })
-            formatted_steps.append({
-                'text': "",
-                'type': 'empty',
-                'align': 'center'
-            })
-            formatted_steps.append({
-                'text': "Approximation Steps:",
-                'type': 'title',
-                'align': 'center'
-            })
-            
-            if value != 0:
-                x0 = value / 3
-                formatted_steps.append({
-                    'text': f"x₀ = {self._format_number(x0)}",
-                    'type': 'step',
-                    'align': 'center'
-                })
-                
-                for i in range(1, 4):
-                    x1 = (2 * x0 + value / (x0 * x0)) / 3
-                    formatted_steps.append({
-                        'text': f"x{i} = (2·{self._format_number(x0)} + {num}/{self._format_number(x0)}²)/3 = {self._format_number(x1)}",
-                        'type': 'step',
-                        'align': 'center'
-                    })
-                    x0 = x1
-            
-            self.steps = formatted_steps
-            return result_str
-        except:
-            return "Error"
-    
-    def rule_of_three(self, a: str, b: str, c: str) -> str:
-        self.steps = []
-        try:
-            val1 = float(a)
-            val2 = float(b)
-            val3 = float(c)
-            result = (val2 * val3) / val1
-            result_str = self._format_number(result)
-            
-            formatted_steps = []
-            formatted_steps.append({
-                'text': "Rule of Three",
-                'type': 'title',
-                'align': 'center'
-            })
-            formatted_steps.append({
-                'text': "",
-                'type': 'empty',
-                'align': 'center'
-            })
-            formatted_steps.append({
-                'text': f"{a} ⟶ {b}",
-                'type': 'step',
-                'align': 'center'
-            })
-            formatted_steps.append({
-                'text': f"{c} ⟶ x",
-                'type': 'step',
-                'align': 'center'
-            })
-            formatted_steps.append({
-                'text': "",
-                'type': 'empty',
-                'align': 'center'
-            })
-            formatted_steps.append({
-                'text': f"x = ({b} × {c}) ÷ {a}",
-                'type': 'operation',
-                'align': 'center'
-            })
-            formatted_steps.append({
-                'text': f"x = {self._format_number(val2 * val3)} ÷ {a}",
-                'type': 'operation',
-                'align': 'center'
-            })
-            formatted_steps.append({
-                'text': f"x = {result_str}",
-                'type': 'result',
-                'align': 'center'
-            })
-            
-            self.steps = formatted_steps
-            return result_str
-        except:
-            return "Error"
-    
-    def integrate(self, expression: str, lower: str, upper: str, intervals: int = 100) -> str:
-        self.steps = []
-        try:
-            a = float(lower)
-            b = float(upper)
-            h = (b - a) / intervals
-            
-            def f(x):
-                return x * x
-            
-            result = (f(a) + f(b)) / 2
-            for i in range(1, intervals):
-                result += f(a + i * h)
-            result *= h
-            
-            result_str = self._format_number(result)
-            
-            formatted_steps = []
-            formatted_steps.append({
-                'text': f"∫ {expression} dx from {lower} to {upper}",
-                'type': 'title',
-                'align': 'center'
-            })
-            formatted_steps.append({
-                'text': "",
-                'type': 'empty',
-                'align': 'center'
-            })
-            formatted_steps.append({
-                'text': f"Trapezoidal Rule with {intervals} intervals",
-                'type': 'subtitle',
-                'align': 'center'
-            })
-            formatted_steps.append({
-                'text': f"h = ({upper} - {lower})/{intervals} = {self._format_number(h)}",
-                'type': 'step',
-                'align': 'center'
-            })
-            formatted_steps.append({
-                'text': f"f({lower}) = {self._format_number(f(a))}",
-                'type': 'step',
-                'align': 'center'
-            })
-            formatted_steps.append({
-                'text': f"f({upper}) = {self._format_number(f(b))}",
-                'type': 'step',
-                'align': 'center'
-            })
-            formatted_steps.append({
-                'text': f"Result ≈ {result_str}",
-                'type': 'result',
-                'align': 'center'
-            })
-            
-            self.steps = formatted_steps
-            return result_str
-        except:
-            return "Error"
-    
-    def derivative(self, expression: str, point: str) -> str:
-        self.steps = []
-        try:
-            x = float(point)
-            h = 0.0001
-            
-            def f(x):
-                return x * x
-            
-            f_plus = f(x + h)
-            f_minus = f(x - h)
-            derivative = (f_plus - f_minus) / (2 * h)
-            
-            result_str = self._format_number(derivative)
-            
-            formatted_steps = []
-            formatted_steps.append({
-                'text': f"d/dx ({expression}) at x = {point}",
-                'type': 'title',
-                'align': 'center'
-            })
-            formatted_steps.append({
-                'text': "",
-                'type': 'empty',
-                'align': 'center'
-            })
-            formatted_steps.append({
-                'text': "Central Difference Method:",
-                'type': 'subtitle',
-                'align': 'center'
-            })
-            formatted_steps.append({
-                'text': f"f'({point}) ≈ [f({self._format_number(x+h)}) - f({self._format_number(x-h)})] / (2·{h})",
-                'type': 'step',
-                'align': 'center'
-            })
-            formatted_steps.append({
-                'text': f"f'({point}) ≈ ({self._format_number(f_plus)} - {self._format_number(f_minus)}) / {self._format_number(2*h)}",
-                'type': 'step',
-                'align': 'center'
-            })
-            formatted_steps.append({
-                'text': f"f'({point}) ≈ {result_str}",
-                'type': 'result',
-                'align': 'center'
-            })
-            
-            self.steps = formatted_steps
-            return result_str
-        except:
-            return "Error"
+    @staticmethod
+    def divide_manual(num1: int, num2: int) -> str:
+        """Generate manual long division display"""
+        if num2 == 0:
+            return '<div class="manual-calc-container"><div class="section-title">Error: Division by zero!</div></div>'
+        
+        quotient = num1 // num2
+        remainder = num1 % num2
+        
+        html = '<div class="manual-calc-container">'
+        html += '<div class="section-title">➗ Long Division</div>'
+        
+        # Build long division format
+        html += '<div style="font-family: monospace; font-size: 20px; padding: 20px;">'
+        html += f'<div style="text-align:right;">{quotient}</div>'
+        html += f'<div style="border-top: 2px solid black; display:inline-block;">{num2} ) {num1}</div><br>'
+        html += f'<div style="text-align:right;">{num2 * quotient}</div>'
+        html += f'<div style="border-top: 2px solid black;">{remainder}</div>'
+        html += '</div>'
+        
+        html += '<div class="math-display">'
+        html += f'<strong>Quotient:</strong> {quotient}<br>'
+        html += f'<strong>Remainder:</strong> {remainder}<br>'
+        html += f'<strong>Verification:</strong> {num2} × {quotient} + {remainder} = {num2 * quotient + remainder}'
+        html += '</div></div>'
+        
+        return html
 
-# Initialize session state
-if 'calc' not in st.session_state:
-    st.session_state.calc = LongArithmeticCalculator()
-if 'result' not in st.session_state:
-    st.session_state.result = None
-if 'operation' not in st.session_state:
-    st.session_state.operation = None
+class FunctionSolver:
+    """Handles function solving with LaTeX display"""
+    
+    def __init__(self):
+        self.x, self.y = symbols('x y')
+    
+    def parse_function(self, func_str: str, variables: str = 'x') -> sp.Expr:
+        """Parse function string to sympy expression"""
+        transformations = (standard_transformations + (implicit_multiplication_application,))
+        
+        # Replace common notations
+        func_str = func_str.replace('^', '**')
+        func_str = func_str.replace('×', '*')
+        func_str = func_str.replace('÷', '/')
+        
+        try:
+            expr = parse_expr(func_str, transformations=transformations)
+            return expr
+        except:
+            return None
+    
+    def solve_linear(self, equation: str) -> str:
+        """Solve linear equation and return LaTeX formatted solution"""
+        try:
+            # Parse equation (format: "ax + b = c" or "ax + b")
+            if '=' in equation:
+                left, right = equation.split('=')
+                expr = parse_expr(f"({left}) - ({right})")
+            else:
+                expr = parse_expr(equation)
+            
+            solution = solve(expr, self.x)
+            
+            html = '<div class="math-display">'
+            html += '<div class="section-title">🔢 Equation Solution</div>'
+            html += f'<div class="latex-render">\\({latex(expr)} = 0\\)</div>'
+            html += '<div style="margin: 20px 0;">'
+            html += '<strong>Solution Steps:</strong><br>'
+            html += f'1. Original equation: \\({latex(expr)} = 0\\)<br>'
+            html += f'2. Solve for x: \\(x = {latex(solution[0])}\\)<br>'
+            html += f'3. Final answer: \\(\\boxed{{x = {latex(solution[0])}}}\\)'
+            html += '</div></div>'
+            
+            return html
+        except Exception as e:
+            return f'<div class="math-display">Error solving equation: {str(e)}</div>'
+    
+    def solve_quadratic(self, a: float, b: float, c: float) -> str:
+        """Solve quadratic equation ax² + bx + c = 0"""
+        discriminant = b**2 - 4*a*c
+        
+        html = '<div class="math-display">'
+        html += '<div class="section-title">📐 Quadratic Equation</div>'
+        html += f'<div class="latex-render">\\({a}x^2 + {b}x + {c} = 0\\)</div>'
+        
+        html += '<div style="margin: 20px 0;">'
+        html += '<strong>Using Quadratic Formula:</strong><br>'
+        html += '\\(x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}\\)<br><br>'
+        html += f'<strong>Step 1:</strong> Calculate discriminant<br>'
+        html += f'\\(\\Delta = ({b})^2 - 4({a})({c}) = {discriminant}\\)<br><br>'
+        
+        if discriminant > 0:
+            x1 = (-b + math.sqrt(discriminant)) / (2*a)
+            x2 = (-b - math.sqrt(discriminant)) / (2*a)
+            html += f'<strong>Step 2:</strong> Two real roots<br>'
+            html += f'\\(x_1 = \\frac{{-{b} + \\sqrt{{{discriminant}}}}}{{2({a})}} = {x1:.4f}\\)<br>'
+            html += f'\\(x_2 = \\frac{{-{b} - \\sqrt{{{discriminant}}}}}{{2({a})}} = {x2:.4f}\\)<br>'
+            html += f'<strong>Final Answer:</strong> \\(\\boxed{{x = {x1:.4f} \\text{{ or }} x = {x2:.4f}}}\\)'
+        elif discriminant == 0:
+            x = -b / (2*a)
+            html += f'<strong>Step 2:</strong> One real root (double)<br>'
+            html += f'\\(x = \\frac{{-{b}}}{{2({a})}} = {x:.4f}\\)<br>'
+            html += f'<strong>Final Answer:</strong> \\(\\boxed{{x = {x:.4f}}}\\)'
+        else:
+            real_part = -b / (2*a)
+            imag_part = math.sqrt(-discriminant) / (2*a)
+            html += f'<strong>Step 2:</strong> Complex roots<br>'
+            html += f'\\(x = {real_part:.4f} \\pm {imag_part:.4f}i\\)<br>'
+            html += f'<strong>Final Answer:</strong> \\(\\boxed{{x = {real_part:.4f} \\pm {imag_part:.4f}i}}\\)'
+        
+        html += '</div></div>'
+        return html
+    
+    def derivative_display(self, func_str: str, var: str = 'x') -> str:
+        """Calculate and display derivative steps"""
+        try:
+            expr = self.parse_function(func_str)
+            if expr is None:
+                return '<div class="math-display">Error: Invalid function</div>'
+            
+            deriv = diff(expr, self.x)
+            
+            html = '<div class="math-display">'
+            html += '<div class="section-title">📈 Derivative Calculation</div>'
+            html += f'<div class="latex-render">\\(f(x) = {latex(expr)}\\)</div>'
+            
+            html += '<div style="margin: 20px 0;">'
+            html += '<strong>Solution Steps:</strong><br>'
+            html += f'1. Original function: \\(f(x) = {latex(expr)}\\)<br>'
+            html += f'2. Apply differentiation rules<br>'
+            html += f'3. Result: \\(f\'(x) = {latex(deriv)}\\)<br>'
+            html += f'<strong>Final Answer:</strong> \\(\\boxed{{f\'(x) = {latex(deriv)}}}\\)'
+            html += '</div></div>'
+            
+            return html
+        except Exception as e:
+            return f'<div class="math-display">Error: {str(e)}</div>'
+    
+    def integral_display(self, func_str: str, var: str = 'x') -> str:
+        """Calculate and display integral steps"""
+        try:
+            expr = self.parse_function(func_str)
+            if expr is None:
+                return '<div class="math-display">Error: Invalid function</div>'
+            
+            integral = integrate(expr, self.x)
+            
+            html = '<div class="math-display">'
+            html += '<div class="section-title">📊 Integral Calculation</div>'
+            html += f'<div class="latex-render">\\(\\int ({latex(expr)}) \\, dx\\)</div>'
+            
+            html += '<div style="margin: 20px 0;">'
+            html += '<strong>Solution Steps:</strong><br>'
+            html += f'1. Original integral: \\(\\int ({latex(expr)}) \\, dx\\)<br>'
+            html += f'2. Apply integration rules<br>'
+            html += f'3. Result: \\(\\int ({latex(expr)}) \\, dx = {latex(integral)} + C\\)<br>'
+            html += f'<strong>Final Answer:</strong> \\(\\boxed{{\\int ({latex(expr)}) \\, dx = {latex(integral)} + C}}\\)'
+            html += '</div></div>'
+            
+            return html
+        except Exception as e:
+            return f'<div class="math-display">Error: {str(e)}</div>'
+    
+    def function_analysis(self, func_str: str) -> str:
+        """Complete function analysis with LaTeX display"""
+        try:
+            expr = self.parse_function(func_str)
+            if expr is None:
+                return '<div class="math-display">Error: Invalid function</div>'
+            
+            html = '<div class="math-display">'
+            html += '<div class="section-title">📊 Function Analysis</div>'
+            html += f'<div class="latex-render">\\(f(x) = {latex(expr)}\\)</div>'
+            
+            # Simplify
+            simplified = simplify(expr)
+            html += f'<strong>Simplified:</strong> \\(f(x) = {latex(simplified)}\\)<br>'
+            
+            # Expand
+            expanded = expand(expr)
+            html += f'<strong>Expanded:</strong> \\(f(x) = {latex(expanded)}\\)<br>'
+            
+            # Factor
+            factored = factor(expr)
+            html += f'<strong>Factored:</strong> \\(f(x) = {latex(factored)}\\)<br>'
+            
+            # Derivative
+            deriv = diff(expr, self.x)
+            html += f'<strong>Derivative:</strong> \\(f\'(x) = {latex(deriv)}\\)<br>'
+            
+            # Integral
+            integral = integrate(expr, self.x)
+            html += f'<strong>Integral:</strong> \\(\\int f(x) \\, dx = {latex(integral)} + C\\)<br>'
+            
+            html += '</div>'
+            return html
+        except Exception as e:
+            return f'<div class="math-display">Error: {str(e)}</div>'
+
+# Initialize components
+if 'manual_arith' not in st.session_state:
+    st.session_state.manual_arith = ManualArithmetic()
+if 'func_solver' not in st.session_state:
+    st.session_state.func_solver = FunctionSolver()
+if 'result_html' not in st.session_state:
+    st.session_state.result_html = ""
 if 'history' not in st.session_state:
     st.session_state.history = []
-if 'steps' not in st.session_state:
-    st.session_state.steps = []
 
 # Title
-st.markdown('<h1 class="title">🧮 HandCalc Pro</h1>', unsafe_allow_html=True)
-st.markdown('<p class="subtitle">Elegant Manual Arithmetic • Watch Calculations Come Alive</p>', unsafe_allow_html=True)
+st.markdown('<h1 class="main-title">🧮 HandCalc Pro</h1>', unsafe_allow_html=True)
+st.markdown('<p class="subtitle">Elegant Manual Arithmetic & Function Solver with LaTeX Display</p>', unsafe_allow_html=True)
 
 # Sidebar
 with st.sidebar:
-    st.markdown("""
-        <h2 style='color: #e94560; font-family: "Playfair Display", serif; text-align: center;'>
-            🎯 Operations
-        </h2>
-    """, unsafe_allow_html=True)
-    
-    operation = st.radio(
-        "Select Operation:",
-        ["Addition (+)", "Subtraction (-)", "Multiplication (×)", "Division (÷)",
-         "Square Root (√)", "Cube Root (∛)", "Rule of Three", "Integration (∫)", "Derivative (d/dx)"],
-        key="op_select"
+    st.markdown("## 🎯 Mode Selection")
+    mode = st.radio(
+        "Choose Mode:",
+        ["📝 Basic Arithmetic", "📐 Functions & Algebra", "📈 Calculus"],
+        key="mode_select"
     )
     
     st.markdown("---")
-    st.markdown("""
-        <h3 style='color: #e94560; font-family: "Playfair Display", serif; text-align: center;'>
-            📊 History
-        </h3>
-    """, unsafe_allow_html=True)
-    
+    st.markdown("## 📊 History")
     for calc in st.session_state.history[-5:]:
-        st.code(calc, language='text')
+        st.markdown(f'<div class="history-item">{calc}</div>', unsafe_allow_html=True)
 
-# Main layout
-col1, col2 = st.columns([1, 1.5])
+# Main content area
+col_input, col_result = st.columns([1, 1.5])
 
-with col1:
-    st.markdown("""
-        <h3 style='color: #e94560; font-family: "Playfair Display", serif;'>
-            📝 Input Numbers
-        </h3>
-    """, unsafe_allow_html=True)
+with col_input:
+    st.markdown("### 📝 Input Panel")
     
-    num3 = ""
-    
-    if operation in ["Addition (+)", "Subtraction (-)", "Multiplication (×)", "Division (÷)"]:
-        num1 = st.text_input("First Number:", key="input_num1", value="5" if operation == "Addition (+)" else "")
-        num2 = st.text_input("Second Number:", key="input_num2", value="6" if operation == "Addition (+)" else "")
+    if mode == "📝 Basic Arithmetic":
+        operation = st.selectbox(
+            "Operation:",
+            ["Addition (+)", "Subtraction (-)", "Multiplication (×)", "Division (÷)"]
+        )
         
-    elif operation in ["Square Root (√)", "Cube Root (∛)"]:
-        num1 = st.text_input("Number:", key="input_num1", value="25" if operation == "Square Root (√)" else "")
-        num2 = ""
+        st.markdown("#### Enter Numbers:")
+        num1 = st.number_input("First Number:", value=123, key="num1", format="%d")
+        num2 = st.number_input("Second Number:", value=45, key="num2", format="%d")
         
-    elif operation == "Rule of Three":
-        num1 = st.text_input("Value A:", key="input_num1", value="10")
-        num2 = st.text_input("Value B:", key="input_num2", value="20")
-        num3 = st.text_input("Value C:", key="input_num3", value="30")
-        
-    elif operation in ["Integration (∫)", "Derivative (d/dx)"]:
-        st.markdown("<p style='color: #fbbf24; font-style: italic;'>Currently using f(x) = x²</p>", unsafe_allow_html=True)
-        num1 = st.text_input("Lower bound / Point:", key="input_num1", value="0")
-        if operation == "Integration (∫)":
-            num2 = st.text_input("Upper bound:", key="input_num2", value="10")
-        else:
-            num2 = ""
-    
-    col_calc, col_clear = st.columns(2)
-    with col_calc:
-        if st.button("✨ Calculate", use_container_width=True):
-            calc = st.session_state.calc
-            result = "Error"
+        if st.button("🧮 Calculate", use_container_width=True):
+            arith = st.session_state.manual_arith
+            result_html = ""
             
-            try:
-                if operation == "Addition (+)":
-                    result = calc.add(num1, num2)
-                    st.session_state.operation = "+"
-                elif operation == "Subtraction (-)":
-                    result = calc.subtract(num1, num2)
-                    st.session_state.operation = "-"
-                elif operation == "Multiplication (×)":
-                    result = calc.multiply(num1, num2)
-                    st.session_state.operation = "×"
-                elif operation == "Division (÷)":
-                    result = calc.divide(num1, num2)
-                    st.session_state.operation = "÷"
-                elif operation == "Square Root (√)":
-                    result = calc.square_root(num1)
-                    st.session_state.operation = "√"
-                elif operation == "Cube Root (∛)":
-                    result = calc.cube_root(num1)
-                    st.session_state.operation = "∛"
-                elif operation == "Rule of Three":
-                    result = calc.rule_of_three(num1, num2, num3)
-                    st.session_state.operation = "R3"
-                elif operation == "Integration (∫)":
-                    result = calc.integrate("x²", num1, num2)
-                    st.session_state.operation = "∫"
-                elif operation == "Derivative (d/dx)":
-                    result = calc.derivative("x²", num1)
-                    st.session_state.operation = "d/dx"
-                
-                st.session_state.result = result
-                st.session_state.steps = calc.steps
-                
-                # Add to history
-                if operation == "Rule of Three":
-                    history_entry = f"{num1} : {num2} :: {num3} : {result}"
-                elif num2:
-                    history_entry = f"{num1} {st.session_state.operation} {num2} = {result}"
-                else:
-                    history_entry = f"{st.session_state.operation}{num1} = {result}"
-                
-                st.session_state.history.append(history_entry)
-                
-            except Exception as e:
-                st.error(f"Error: {str(e)}")
+            if operation == "Addition (+)":
+                result_html = arith.add_manual(int(num1), int(num2))
+            elif operation == "Subtraction (-)":
+                result_html = arith.subtract_manual(int(num1), int(num2))
+            elif operation == "Multiplication (×)":
+                result_html = arith.multiply_manual(int(num1), int(num2))
+            elif operation == "Division (÷)":
+                result_html = arith.divide_manual(int(num1), int(num2))
+            
+            st.session_state.result_html = result_html
+            st.session_state.history.append(f"{num1} {operation[0]} {num2}")
     
-    with col_clear:
-        if st.button("🔄 Clear", use_container_width=True):
-            st.session_state.result = None
-            st.session_state.steps = []
-            st.rerun()
+    elif mode == "📐 Functions & Algebra":
+        st.markdown("#### Enter Function or Equation:")
+        st.markdown("*Examples: x^2 + 3*x - 4, 2*x + 5 = 15, sin(x) + cos(x)*")
+        
+        func_input = st.text_input("f(x) =", value="x^2 + 3*x - 4", key="func_input")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🔍 Analyze Function", use_container_width=True):
+                solver = st.session_state.func_solver
+                result_html = solver.function_analysis(func_input)
+                st.session_state.result_html = result_html
+                st.session_state.history.append(f"Analyze: {func_input}")
+        
+        with col2:
+            if st.button("📐 Solve Quadratic", use_container_width=True):
+                try:
+                    # Parse coefficients
+                    coeffs = st.text_input("Enter a, b, c (comma-separated):", "1, 3, -4")
+                    a, b, c = map(float, coeffs.split(','))
+                    solver = st.session_state.func_solver
+                    result_html = solver.solve_quadratic(a, b, c)
+                    st.session_state.result_html = result_html
+                    st.session_state.history.append(f"Quadratic: {a}x² + {b}x + {c}")
+                except:
+                    st.error("Invalid coefficients format")
+    
+    elif mode == "📈 Calculus":
+        st.markdown("#### Calculus Operations:")
+        calc_operation = st.radio(
+            "Select:",
+            ["Derivative", "Integral", "Both"]
+        )
+        
+        func_input = st.text_input("f(x) =", value="x^2 + 3*x", key="calc_input")
+        
+        if st.button("📊 Calculate", use_container_width=True):
+            solver = st.session_state.func_solver
+            result_html = ""
+            
+            if calc_operation in ["Derivative", "Both"]:
+                result_html += solver.derivative_display(func_input)
+                result_html += "<br>"
+            
+            if calc_operation in ["Integral", "Both"]:
+                result_html += solver.integral_display(func_input)
+            
+            st.session_state.result_html = result_html
+            st.session_state.history.append(f"Calculus: {func_input}")
 
-with col2:
-    st.markdown("""
-        <h3 style='color: #e94560; font-family: "Playfair Display", serif; text-align: center;'>
-            📐 Manual Calculation
-        </h3>
-    """, unsafe_allow_html=True)
+# Result panel with elegant display
+with col_result:
+    st.markdown("### ✨ Manual Calculation Display")
     
-    if st.session_state.result is not None:
-        # Result display
-        st.markdown(f'<div class="number-display">{st.session_state.result}</div>', unsafe_allow_html=True)
-        
-        # Manual calculation steps
-        if st.session_state.steps:
-            st.markdown('<div class="manual-calc-container">', unsafe_allow_html=True)
-            st.markdown('<div class="manual-calc-title">✦ Step by Step Resolution ✦</div>', unsafe_allow_html=True)
-            st.markdown('<div class="calculation-lines">', unsafe_allow_html=True)
-            
-            for step in st.session_state.steps:
-                if isinstance(step, dict):
-                    step_type = step.get('type', 'simple')
-                    text = step.get('text', '')
-                    
-                    if step_type == 'carry':
-                        st.markdown(f'<div class="calculation-line"><span class="carry-number">{text}</span></div>', unsafe_allow_html=True)
-                    elif step_type == 'number':
-                        st.markdown(f'<div class="calculation-line">{text}</div>', unsafe_allow_html=True)
-                    elif step_type == 'operation':
-                        st.markdown(f'<div class="calculation-line"><span class="operator-symbol">{text[0]}</span> {text[1:]}</div>', unsafe_allow_html=True)
-                    elif step_type == 'separator':
-                        st.markdown(f'<div class="calculation-line separator-line">{text}</div>', unsafe_allow_html=True)
-                    elif step_type == 'result':
-                        st.markdown(f'<div class="calculation-line result-line">{text}</div>', unsafe_allow_html=True)
-                    elif step_type == 'partial':
-                        st.markdown(f'<div class="calculation-line" style="color: #fbbf24;">{text}</div>', unsafe_allow_html=True)
-                    elif step_type == 'partial_sum':
-                        st.markdown(f'<div class="calculation-line" style="color: #60a5fa;">{text}</div>', unsafe_allow_html=True)
-                    elif step_type == 'title':
-                        st.markdown(f'<div class="calculation-line" style="color: #e94560; font-size: 26px; font-weight: bold;">{text}</div>', unsafe_allow_html=True)
-                    elif step_type == 'subtitle':
-                        st.markdown(f'<div class="calculation-line" style="color: #fbbf24; font-size: 22px;">{text}</div>', unsafe_allow_html=True)
-                    elif step_type == 'step':
-                        st.markdown(f'<div class="calculation-line" style="color: #94a3b8;">{text}</div>', unsafe_allow_html=True)
-                    elif step_type == 'error':
-                        st.markdown(f'<div class="calculation-line" style="color: #ef4444;">{text}</div>', unsafe_allow_html=True)
-                    else:
-                        st.markdown(f'<div class="calculation-line">{text}</div>', unsafe_allow_html=True)
-                else:
-                    st.markdown(f'<div class="calculation-line">{step}</div>', unsafe_allow_html=True)
-            
-            st.markdown('</div>', unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-    else:
-        # Placeholder
-        st.markdown("""
-            <div class="manual-calc-container">
-                <div class="manual-calc-title">✦ Ready to Calculate ✦</div>
-                <div class="calculation-lines">
-                    <div class="calculation-line" style="color: #94a3b8; text-align: center; font-style: italic;">
-                        Enter numbers and click Calculate<br>
-                        to see the magic unfold...
-                    </div>
-                </div>
+    if st.session_state.result_html:
+        st.components.v1.html(
+            f"""
+            <div style="max-height: 800px; overflow-y: auto; padding: 10px;">
+                {st.session_state.result_html}
             </div>
+            """,
+            height=600,
+            scrolling=True
+        )
+    else:
+        st.markdown("""
+        <div style="text-align: center; padding: 50px; color: #999;">
+            <h3>🔮 Your solution will appear here</h3>
+            <p>Enter values and click Calculate to see the magic!</p>
+        </div>
         """, unsafe_allow_html=True)
 
-# WebGL 3D Visualization
-st.markdown("---")
+# LaTeX rendering support
 st.markdown("""
-    <h3 style='color: #e94560; font-family: "Playfair Display", serif; text-align: center;'>
-        🌐 3D Mathematical Visualization
-    </h3>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/MathJax.js?config=TeX-MML-AM_CHTML"></script>
+<script>
+    MathJax.Hub.Config({
+        tex2jax: {
+            inlineMath: [['\\\\(', '\\\\)']],
+            displayMath: [['\\\\[', '\\\\]']],
+            processEscapes: true
+        },
+        "HTML-CSS": { 
+            preferredFont: "TeX", 
+            availableFonts: ["STIX","TeX"],
+            scale: 100
+        }
+    });
+</script>
 """, unsafe_allow_html=True)
+
+# 3D WebGL Background
+st.markdown("---")
+st.markdown("### 🌐 Mathematical Visualization")
 
 webgl_html = """
 <!DOCTYPE html>
 <html>
 <head>
     <style>
-        body { margin: 0; background: #0f0c29; }
+        body { margin: 0; background: #000; overflow: hidden; }
         canvas { display: block; }
     </style>
 </head>
@@ -974,93 +642,74 @@ webgl_html = """
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script>
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x0f0c29);
+        scene.background = new THREE.Color(0x0a0a1a);
         
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / 250, 0.1, 1000);
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / 150, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-        renderer.setSize(window.innerWidth, 250);
+        renderer.setSize(window.innerWidth, 150);
         document.body.appendChild(renderer.domElement);
         
-        // Lighting
-        const ambientLight = new THREE.AmbientLight(0x404040, 2);
-        scene.add(ambientLight);
-        
-        const pointLight1 = new THREE.PointLight(0xe94560, 1, 10);
-        pointLight1.position.set(3, 3, 3);
-        scene.add(pointLight1);
-        
-        const pointLight2 = new THREE.PointLight(0x667eea, 1, 10);
-        pointLight2.position.set(-3, -1, -2);
-        scene.add(pointLight2);
-        
-        // Create elegant geometric shapes
-        const symbols = ['+', '−', '×', '÷', '=', '√', '∫', '∂', '∑', '∏', '∞', 'π'];
+        // Create mathematical symbols
+        const symbols = ['∫', '∑', '∏', '√', '∞', '∂', '∇', '∆', 'π', 'θ', 'α', 'β', 'γ'];
         const objects = [];
         
+        // Create particle system
+        const particlesGeometry = new THREE.BufferGeometry();
+        const particlesCount = 200;
+        const posArray = new Float32Array(particlesCount * 3);
+        
+        for(let i = 0; i < particlesCount * 3; i++) {
+            posArray[i] = (Math.random() - 0.5) * 15;
+        }
+        
+        particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        
+        const particlesMaterial = new THREE.PointsMaterial({
+            size: 0.05,
+            color: 0x667eea,
+            blending: THREE.AdditiveBlending
+        });
+        
+        const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
+        scene.add(particlesMesh);
+        
+        // Add geometric shapes
         symbols.forEach((symbol, index) => {
-            // Mix of different geometries
-            let geometry;
-            const random = Math.random();
-            
-            if (random < 0.3) {
-                geometry = new THREE.TorusGeometry(0.25, 0.08, 16, 32);
-            } else if (random < 0.6) {
-                geometry = new THREE.OctahedronGeometry(0.3);
-            } else if (random < 0.8) {
-                geometry = new THREE.IcosahedronGeometry(0.25);
-            } else {
-                geometry = new THREE.TorusKnotGeometry(0.2, 0.06, 64, 8);
-            }
-            
+            const geometry = new THREE.IcosahedronGeometry(0.3, 1);
             const material = new THREE.MeshPhongMaterial({ 
-                color: new THREE.Color(`hsl(${index * 30}, 70%, 60%)`),
-                emissive: new THREE.Color(`hsl(${index * 30}, 70%, 15%)`),
-                shininess: 100,
-                specular: 0x444444,
+                color: new THREE.Color(`hsl(${index * 27}, 70%, 60%)`),
+                emissive: new THREE.Color(`hsl(${index * 27}, 70%, 20%)`),
+                wireframe: true,
                 transparent: true,
                 opacity: 0.8
             });
-            
             const mesh = new THREE.Mesh(geometry, material);
             
-            mesh.position.x = (Math.random() - 0.5) * 12;
+            mesh.position.x = (Math.random() - 0.5) * 10;
             mesh.position.y = (Math.random() - 0.5) * 4;
-            mesh.position.z = (Math.random() - 0.5) * 6;
+            mesh.position.z = (Math.random() - 0.5) * 5;
             
             mesh.userData = {
-                speed: Math.random() * 0.015 + 0.005,
-                rotationSpeed: Math.random() * 0.02 + 0.005,
-                amplitude: Math.random() * 1.5 + 0.5,
-                offset: Math.random() * Math.PI * 2,
-                initialY: mesh.position.y
+                speed: Math.random() * 0.01 + 0.005,
+                rotationSpeed: Math.random() * 0.02 + 0.01,
+                offset: Math.random() * Math.PI * 2
             };
             
             scene.add(mesh);
             objects.push(mesh);
         });
         
-        // Add floating particles
-        const particlesGeometry = new THREE.BufferGeometry();
-        const particlesCount = 200;
-        const posArray = new Float32Array(particlesCount * 3);
+        // Lights
+        const ambientLight = new THREE.AmbientLight(0x404040, 1.5);
+        scene.add(ambientLight);
         
-        for (let i = 0; i < particlesCount * 3; i += 3) {
-            posArray[i] = (Math.random() - 0.5) * 15;
-            posArray[i + 1] = (Math.random() - 0.5) * 8;
-            posArray[i + 2] = (Math.random() - 0.5) * 10;
-        }
+        const pointLight1 = new THREE.PointLight(0x667eea, 1, 10);
+        pointLight1.position.set(5, 3, 3);
+        scene.add(pointLight1);
         
-        particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
-        const particlesMaterial = new THREE.PointsMaterial({
-            size: 0.02,
-            color: 0xe94560,
-            transparent: true,
-            opacity: 0.6,
-            blending: THREE.AdditiveBlending
-        });
-        
-        const particles = new THREE.Points(particlesGeometry, particlesMaterial);
-        scene.add(particles);
+        const pointLight2 = new THREE.PointLight(0xf093fb, 1, 10);
+        pointLight2.position.set(-5, -2, -3);
+        scene.add(pointLight2);
         
         camera.position.z = 6;
         camera.position.y = 1;
@@ -1071,17 +720,17 @@ webgl_html = """
             objects.forEach(obj => {
                 obj.rotation.x += obj.userData.rotationSpeed;
                 obj.rotation.y += obj.userData.rotationSpeed * 0.7;
-                obj.rotation.z += obj.userData.rotationSpeed * 0.3;
-                
-                obj.position.y = obj.userData.initialY + 
-                    Math.sin(Date.now() * obj.userData.speed + obj.userData.offset) * obj.userData.amplitude;
+                obj.rotation.z += obj.userData.rotationSpeed * 0.5;
+                obj.position.y += Math.sin(Date.now() * obj.userData.speed + obj.userData.offset) * 0.003;
             });
             
-            particles.rotation.y += 0.0005;
-            particles.rotation.x += 0.0003;
+            particlesMesh.rotation.y += 0.0005;
+            particlesMesh.rotation.x += 0.0002;
+            
+            pointLight1.intensity = 1 + Math.sin(Date.now() * 0.001) * 0.3;
+            pointLight2.intensity = 1 + Math.cos(Date.now() * 0.001) * 0.3;
             
             camera.rotation.y += 0.001;
-            camera.position.y += Math.sin(Date.now() * 0.0005) * 0.003;
             
             renderer.render(scene, camera);
         }
@@ -1089,26 +738,23 @@ webgl_html = """
         animate();
         
         window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / 250;
+            camera.aspect = window.innerWidth / 150;
             camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, 250);
+            renderer.setSize(window.innerWidth, 150);
         });
     </script>
 </body>
 </html>
 """
 
-components.html(webgl_html, height=270)
+components.html(webgl_html, height=160)
 
 # Footer
-st.markdown("---")
 st.markdown("""
-<div style="text-align: center; padding: 20px;">
-    <p style="color: #e94560; font-family: 'Playfair Display', serif; font-size: 24px;">
-        ✦ HandCalc Pro ✦
+<div style="text-align: center; color: #666; padding: 20px;">
+    <p style="font-family: 'Playfair Display', serif; font-size: 18px;">
+        🧮 HandCalc Pro - Where Mathematics Becomes Art
     </p>
-    <p style="color: rgba(255, 255, 255, 0.5); font-family: 'Cormorant Garamond', serif; font-style: italic;">
-        Elegant Mathematics • Manual Precision • Timeless Beauty
-    </p>
+    <p>Elegant manual calculations with LaTeX precision</p>
 </div>
 """, unsafe_allow_html=True)

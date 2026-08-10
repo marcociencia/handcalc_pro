@@ -1,358 +1,324 @@
-// calculator_engine.cpp
-#include <iostream>
-#include <vector>
-#include <string>
-#include <cmath>
-#include <sstream>
-#include <iomanip>
-#include <algorithm>
+# app.py
+import streamlit as st
+import streamlit.components.v1 as components
+import numpy as np
+from calculator_engine import LongArithmeticCalculator
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
-class LongArithmeticCalculator {
-private:
-    struct Step {
-        std::string description;
-        std::string visual;
-        int indent;
-    };
-    
-    std::vector<Step> steps;
-    
-    // Helper function to convert string to number with decimal support
-    double parseNumber(const std::string& num) {
-        try {
-            return std::stod(num);
-        } catch (...) {
-            return 0.0;
-        }
-    }
-    
-    // Format number for display
-    std::string formatNumber(double num) {
-        if (num == floor(num)) {
-            return std::to_string((long long)num);
-        }
-        std::ostringstream ss;
-        ss << std::fixed << std::setprecision(6) << num;
-        std::string result = ss.str();
-        // Remove trailing zeros
-        result.erase(result.find_last_not_of('0') + 1, std::string::npos);
-        if (result.back() == '.') result.pop_back();
-        return result;
-    }
-    
-    // Create separation line
-    std::string createLine(int length) {
-        return std::string(length, '─');
-    }
-    
-    // Center align numbers
-    std::string centerAlign(const std::string& text, int width) {
-        int padding = width - text.length();
-        if (padding <= 0) return text;
-        int leftPad = padding / 2;
-        return std::string(leftPad, ' ') + text;
-    }
+# Page configuration
+st.set_page_config(
+    page_title="HandCalc Pro - Manual Arithmetic Visualizer",
+    page_icon="🧮",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-public:
-    LongArithmeticCalculator() {
-        steps.clear();
+# Custom CSS
+st.markdown("""
+<style>
+    .stButton > button {
+        width: 100%;
+        height: 60px;
+        font-size: 20px;
+        font-weight: bold;
+        border-radius: 10px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        transition: transform 0.3s ease;
     }
-    
-    // Addition with manual step-by-step
-    std::string add(std::string a, std::string b) {
-        steps.clear();
-        double num1 = parseNumber(a);
-        double num2 = parseNumber(b);
-        double result = num1 + num2;
-        
-        // Find the wider number for alignment
-        int maxLen = std::max(a.length(), b.length());
-        int resultLen = formatNumber(result).length();
-        int totalWidth = std::max(maxLen + 2, resultLen) + 2;
-        
-        std::ostringstream visual;
-        visual << std::string(totalWidth - a.length(), ' ') << a << "\n";
-        visual << "+" << std::string(totalWidth - b.length() - 1, ' ') << b << "\n";
-        visual << createLine(totalWidth) << "\n";
-        visual << std::string(totalWidth - resultLen, ' ') << formatNumber(result) << "\n";
-        
-        steps.push_back({visual.str(), "", 0});
-        return formatNumber(result);
+    .stButton > button:hover {
+        transform: scale(1.05);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.3);
     }
-    
-    // Subtraction with manual step-by-step
-    std::string subtract(std::string a, std::string b) {
-        steps.clear();
-        double num1 = parseNumber(a);
-        double num2 = parseNumber(b);
-        double result = num1 - num2;
-        
-        int maxLen = std::max(a.length(), b.length());
-        int resultLen = formatNumber(result).length();
-        int totalWidth = std::max(maxLen + 2, resultLen) + 2;
-        
-        std::ostringstream visual;
-        visual << std::string(totalWidth - a.length(), ' ') << a << "\n";
-        visual << "-" << std::string(totalWidth - b.length() - 1, ' ') << b << "\n";
-        visual << createLine(totalWidth) << "\n";
-        visual << std::string(totalWidth - resultLen, ' ') << formatNumber(result) << "\n";
-        
-        steps.push_back({visual.str(), "", 0});
-        return formatNumber(result);
+    .number-display {
+        font-size: 32px;
+        font-family: 'Courier New', monospace;
+        padding: 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 10px;
+        text-align: right;
+        color: white;
+        margin: 10px 0;
     }
+    .manual-calc {
+        font-family: 'Courier New', monospace;
+        font-size: 18px;
+        padding: 20px;
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .title {
+        text-align: center;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-size: 48px;
+        font-weight: bold;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Initialize calculator
+if 'calc' not in st.session_state:
+    st.session_state.calc = LongArithmeticCalculator()
+if 'display' not in st.session_state:
+    st.session_state.display = ""
+if 'num1' not in st.session_state:
+    st.session_state.num1 = ""
+if 'num2' not in st.session_state:
+    st.session_state.num2 = ""
+if 'operation' not in st.session_state:
+    st.session_state.operation = None
+if 'result' not in st.session_state:
+    st.session_state.result = None
+
+# Title
+st.markdown('<h1 class="title">🧮 HandCalc Pro</h1>', unsafe_allow_html=True)
+st.markdown('<p style="text-align: center; color: #666;">Manual Arithmetic Visualizer - Watch Calculations Unfold Step by Step!</p>', unsafe_allow_html=True)
+
+# Sidebar for operation selection
+with st.sidebar:
+    st.markdown("## 🎯 Operations")
+    operation = st.radio(
+        "Select Operation:",
+        ["Addition (+)", "Subtraction (-)", "Multiplication (×)", "Division (÷)",
+         "Square Root (√)", "Cube Root (∛)", "Rule of Three", "Integration (∫)", "Derivative (d/dx)"],
+        key="op_select"
+    )
     
-    // Multiplication with manual step-by-step (long multiplication)
-    std::string multiply(std::string a, std::string b) {
-        steps.clear();
-        double num1 = parseNumber(a);
-        double num2 = parseNumber(b);
-        double result = num1 * num2;
+    st.markdown("---")
+    st.markdown("## 📊 History")
+    if 'history' not in st.session_state:
+        st.session_state.history = []
+    
+    for calc in st.session_state.history[-5:]:
+        st.code(calc, language='text')
+
+# Main calculator interface
+col1, col2, col3 = st.columns([2, 1, 2])
+
+with col1:
+    st.markdown("### 📝 Input")
+    
+    if operation in ["Addition (+)", "Subtraction (-)", "Multiplication (×)", "Division (÷)"]:
+        num1 = st.text_input("First Number:", key="input_num1", value="")
+        num2 = st.text_input("Second Number:", key="input_num2", value="")
         
-        // For integers, show long multiplication process
-        if (floor(num1) == num1 && floor(num2) == num2) {
-            long long n1 = (long long)num1;
-            long long n2 = (long long)num2;
+    elif operation in ["Square Root (√)", "Cube Root (∛)"]:
+        num1 = st.text_input("Number:", key="input_num1", value="")
+        num2 = ""
+        
+    elif operation == "Rule of Three":
+        num1 = st.text_input("Value A:", key="input_num1", value="")
+        num2 = st.text_input("Value B:", key="input_num2", value="")
+        num3 = st.text_input("Value C:", key="input_num3", value="")
+        
+    elif operation in ["Integration (∫)", "Derivative (d/dx)"]:
+        st.markdown("**Note: Currently supports f(x) = x² as example**")
+        num1 = st.text_input("Lower bound / Point:", key="input_num1", value="")
+        if operation == "Integration (∫)":
+            num2 = st.text_input("Upper bound:", key="input_num2", value="")
+    
+    col_calc, col_clear = st.columns(2)
+    with col_calc:
+        if st.button("🧮 Calculate", use_container_width=True):
+            calc = st.session_state.calc
             
-            std::string str2 = std::to_string(n2);
-            std::vector<long long> partialProducts;
+            try:
+                if operation == "Addition (+)":
+                    result = calc.add(num1, num2)
+                    st.session_state.operation = "+"
+                elif operation == "Subtraction (-)":
+                    result = calc.subtract(num1, num2)
+                    st.session_state.operation = "-"
+                elif operation == "Multiplication (×)":
+                    result = calc.multiply(num1, num2)
+                    st.session_state.operation = "×"
+                elif operation == "Division (÷)":
+                    result = calc.divide(num1, num2)
+                    st.session_state.operation = "÷"
+                elif operation == "Square Root (√)":
+                    result = calc.squareRoot(num1)
+                    st.session_state.operation = "√"
+                elif operation == "Cube Root (∛)":
+                    result = calc.cubeRoot(num1)
+                    st.session_state.operation = "∛"
+                elif operation == "Rule of Three":
+                    result = calc.ruleOfThree(num1, num2, num3)
+                    st.session_state.operation = "R3"
+                elif operation == "Integration (∫)":
+                    result = calc.integrate("x²", num1, num2)
+                    st.session_state.operation = "∫"
+                elif operation == "Derivative (d/dx)":
+                    result = calc.derivative("x²", num1)
+                    st.session_state.operation = "d/dx"
+                
+                st.session_state.result = result
+                st.session_state.history.append(f"{num1} {st.session_state.operation} {num2} = {result}" if num2 else f"{st.session_state.operation}{num1} = {result}")
+                
+            except Exception as e:
+                st.error(f"Error: {str(e)}")
+    
+    with col_clear:
+        if st.button("🗑️ Clear", use_container_width=True):
+            st.session_state.display = ""
+            st.session_state.num1 = ""
+            st.session_state.num2 = ""
+            st.session_state.result = None
+            st.rerun()
+
+with col2:
+    st.markdown("### 🎨 Visualization")
+    
+    if st.session_state.result is not None:
+        st.markdown(f'<div class="number-display">{st.session_state.result}</div>', unsafe_allow_html=True)
+        
+        # Create 3D visualization using plotly
+        if st.session_state.operation in ["+", "-", "×", "÷"]:
+            try:
+                val1 = float(st.session_state.num1) if 'num1' in st.session_state else 0
+                val2 = float(st.session_state.num2) if 'num2' in st.session_state else 0
+                result = float(st.session_state.result)
+                
+                fig = go.Figure(data=[
+                    go.Bar(name='Numbers', x=['Num1', 'Num2', 'Result'], 
+                          y=[val1, val2, result],
+                          marker_color=['#667eea', '#764ba2', '#f093fb'])
+                ])
+                fig.update_layout(
+                    title="Operation Visualization",
+                    template="plotly_dark",
+                    height=300
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            except:
+                pass
+
+with col3:
+    st.markdown("### 📐 Manual Calculation")
+    
+    if st.session_state.result is not None:
+        steps = st.session_state.calc.getSteps()
+        if steps:
+            st.markdown('<div class="manual-calc">', unsafe_allow_html=True)
+            for step in steps:
+                st.code(step.description if hasattr(step, 'description') else step, language='text')
+            st.markdown('</div>', unsafe_allow_html=True)
+
+# WebGL 3D Calculator Visual
+st.markdown("---")
+st.markdown("### 🌐 WebGL 3D Calculator")
+
+webgl_html = """
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { margin: 0; background: #000; }
+        canvas { display: block; }
+        #info { 
+            position: absolute; 
+            top: 10px; 
+            left: 10px; 
+            color: white; 
+            font-family: monospace;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">🧮 HandCalc Pro - WebGL 3D View</div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Initialize Three.js scene
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a2e);
+        
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / 200, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, 200);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+        
+        // Add lights
+        const ambientLight = new THREE.AmbientLight(0x404040, 2);
+        scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        directionalLight.position.set(5, 5, 5);
+        directionalLight.castShadow = true;
+        scene.add(directionalLight);
+        
+        // Create floating numbers
+        const numbers = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '-', '×', '÷', '='];
+        const floatingObjects = [];
+        
+        numbers.forEach((num, index) => {
+            const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+            const material = new THREE.MeshPhongMaterial({ 
+                color: new THREE.Color(`hsl(${index * 24}, 70%, 50%)`),
+                emissive: new THREE.Color(`hsl(${index * 24}, 70%, 20%)`),
+                shininess: 100
+            });
+            const cube = new THREE.Mesh(geometry, material);
             
-            // Calculate partial products
-            int multiplierPos = 0;
-            for (int i = str2.length() - 1; i >= 0; i--) {
-                int digit = str2[i] - '0';
-                long long partial = n1 * digit * pow(10, multiplierPos);
-                partialProducts.push_back(partial);
-                multiplierPos++;
-            }
+            cube.position.x = (Math.random() - 0.5) * 10;
+            cube.position.y = (Math.random() - 0.5) * 3;
+            cube.position.z = (Math.random() - 0.5) * 5;
             
-            // Build visual representation
-            int maxWidth = std::max(std::to_string(n1).length(), 
-                                   std::to_string(n2).length() + 1);
-            int resultWidth = std::to_string((long long)result).length();
-            int totalWidth = std::max(maxWidth + 2, resultWidth) + 2;
+            cube.userData = {
+                speed: Math.random() * 0.02 + 0.01,
+                rotationSpeed: Math.random() * 0.02 + 0.01,
+                amplitude: Math.random() * 2 + 1,
+                offset: Math.random() * Math.PI * 2
+            };
             
-            std::ostringstream visual;
-            visual << std::string(totalWidth - std::to_string(n1).length(), ' ') << n1 << "\n";
-            visual << "×" << std::string(totalWidth - std::to_string(n2).length() - 1, ' ') << n2 << "\n";
-            visual << createLine(totalWidth) << "\n";
+            scene.add(cube);
+            floatingObjects.push(cube);
+        });
+        
+        camera.position.z = 5;
+        camera.position.y = 2;
+        
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
             
-            // Show partial products
-            std::reverse(partialProducts.begin(), partialProducts.end());
-            for (size_t i = 0; i < partialProducts.size(); i++) {
-                std::string ppStr = std::to_string(partialProducts[i]);
-                if (i == 0) {
-                    visual << std::string(totalWidth - ppStr.length(), ' ') << ppStr << "\n";
-                } else {
-                    visual << "+" << std::string(totalWidth - ppStr.length() - 1, ' ') << ppStr << "\n";
-                }
-            }
+            floatingObjects.forEach((obj, index) => {
+                obj.rotation.x += obj.userData.rotationSpeed;
+                obj.rotation.y += obj.userData.rotationSpeed * 0.8;
+                
+                obj.position.y += Math.sin(Date.now() * obj.userData.speed + obj.userData.offset) * 0.005;
+            });
             
-            visual << createLine(totalWidth) << "\n";
-            visual << std::string(totalWidth - resultWidth, ' ') << (long long)result << "\n";
+            camera.rotation.y += 0.002;
             
-            steps.push_back({visual.str(), "", 0});
-        } else {
-            // For decimals, show direct multiplication
-            int totalWidth = std::max({a.length(), b.length() + 1, 
-                                     formatNumber(result).length()}) + 2;
-            
-            std::ostringstream visual;
-            visual << std::string(totalWidth - a.length(), ' ') << a << "\n";
-            visual << "×" << std::string(totalWidth - b.length() - 1, ' ') << b << "\n";
-            visual << createLine(totalWidth) << "\n";
-            visual << std::string(totalWidth - formatNumber(result).length(), ' ') 
-                   << formatNumber(result) << "\n";
-            
-            steps.push_back({visual.str(), "", 0});
+            renderer.render(scene, camera);
         }
         
-        return formatNumber(result);
-    }
-    
-    // Division with manual step-by-step
-    std::string divide(std::string a, std::string b) {
-        steps.clear();
-        double num1 = parseNumber(a);
-        double num2 = parseNumber(b);
+        animate();
         
-        if (num2 == 0) {
-            steps.push_back({"Error: Division by zero!", "", 0});
-            return "Error";
-        }
-        
-        double result = num1 / num2;
-        
-        std::ostringstream visual;
-        visual << a << " ÷ " << b << " = " << formatNumber(result) << "\n";
-        
-        // Show long division process for integers
-        if (floor(num1) == num1 && floor(num2) == num2 && num1 >= num2) {
-            long long dividend = (long long)num1;
-            long long divisor = (long long)num2;
-            long long quotient = dividend / divisor;
-            long long remainder = dividend % divisor;
-            
-            visual << "\nLong Division Process:\n";
-            visual << "  " << quotient << " (quotient)\n";
-            visual << divisor << ")" << dividend << "\n";
-            visual << "  " << (divisor * quotient) << "\n";
-            visual << createLine(10) << "\n";
-            visual << "  " << remainder << " (remainder)\n";
-        }
-        
-        steps.push_back({visual.str(), "", 0});
-        return formatNumber(result);
-    }
-    
-    // Square root with approximation steps
-    std::string squareRoot(std::string num) {
-        steps.clear();
-        double value = parseNumber(num);
-        
-        if (value < 0) {
-            steps.push_back({"Error: Cannot calculate square root of negative number!", "", 0});
-            return "Error";
-        }
-        
-        double result = sqrt(value);
-        
-        std::ostringstream visual;
-        visual << "√" << num << " = " << formatNumber(result) << "\n\n";
-        
-        // Show Newton's method steps for manual approximation
-        if (value > 0) {
-            visual << "Newton's Method Approximation:\n";
-            double x0 = value / 2; // Initial guess
-            visual << "Step 0: Initial guess = " << formatNumber(x0) << "\n";
-            
-            for (int i = 1; i <= 3; i++) {
-                double x1 = (x0 + value / x0) / 2;
-                visual << "Step " << i << ": " << formatNumber(x0) 
-                       << " → " << formatNumber(x1) << "\n";
-                x0 = x1;
-            }
-        }
-        
-        steps.push_back({visual.str(), "", 0});
-        return formatNumber(result);
-    }
-    
-    // Cube root with approximation steps
-    std::string cubeRoot(std::string num) {
-        steps.clear();
-        double value = parseNumber(num);
-        double result = cbrt(value);
-        
-        std::ostringstream visual;
-        visual << "∛" << num << " = " << formatNumber(result) << "\n\n";
-        
-        // Show approximation steps
-        if (value != 0) {
-            visual << "Approximation Steps:\n";
-            double x0 = value / 3;
-            visual << "Step 0: Initial guess = " << formatNumber(x0) << "\n";
-            
-            for (int i = 1; i <= 3; i++) {
-                double x1 = (2 * x0 + value / (x0 * x0)) / 3;
-                visual << "Step " << i << ": " << formatNumber(x0) 
-                       << " → " << formatNumber(x1) << "\n";
-                x0 = x1;
-            }
-        }
-        
-        steps.push_back({visual.str(), "", 0});
-        return formatNumber(result);
-    }
-    
-    // Rule of Three
-    std::string ruleOfThree(std::string a, std::string b, std::string c) {
-        steps.clear();
-        double val1 = parseNumber(a);
-        double val2 = parseNumber(b);
-        double val3 = parseNumber(c);
-        
-        // Direct proportion: a → b, c → x
-        double result = (val2 * val3) / val1;
-        
-        std::ostringstream visual;
-        visual << "Rule of Three (Direct Proportion):\n\n";
-        visual << a << " ———→ " << b << "\n";
-        visual << c << " ———→ x\n\n";
-        visual << "x = (" << b << " × " << c << ") ÷ " << a << "\n";
-        visual << "x = " << formatNumber(val2 * val3) << " ÷ " << a << "\n";
-        visual << "x = " << formatNumber(result) << "\n";
-        
-        steps.push_back({visual.str(), "", 0});
-        return formatNumber(result);
-    }
-    
-    // Simple numerical integration (trapezoidal rule)
-    std::string integrate(std::string expression, std::string lower, std::string upper, int intervals = 100) {
-        steps.clear();
-        double a = parseNumber(lower);
-        double b = parseNumber(upper);
-        double h = (b - a) / intervals;
-        double result = 0;
-        
-        std::ostringstream visual;
-        visual << "Numerical Integration (Trapezoidal Rule)\n";
-        visual << "∫ " << expression << " dx from " << lower << " to " << upper << "\n\n";
-        visual << "Using " << intervals << " intervals\n";
-        visual << "Step size h = " << formatNumber(h) << "\n\n";
-        
-        // Simple function evaluation (we'll use f(x) = x^2 as example)
-        auto f = [](double x) { return x * x; };
-        
-        // Trapezoidal rule
-        result = (f(a) + f(b)) / 2;
-        for (int i = 1; i < intervals; i++) {
-            result += f(a + i * h);
-        }
-        result *= h;
-        
-        visual << "Approximation Steps:\n";
-        visual << "f(" << formatNumber(a) << ") = " << formatNumber(f(a)) << "\n";
-        visual << "f(" << formatNumber(b) << ") = " << formatNumber(f(b)) << "\n";
-        visual << "Sum of interior points = " << formatNumber(result / h) << "\n\n";
-        visual << "Result ≈ " << formatNumber(result) << "\n";
-        
-        steps.push_back({visual.str(), "", 0});
-        return formatNumber(result);
-    }
-    
-    // Numerical derivative
-    std::string derivative(std::string expression, std::string point) {
-        steps.clear();
-        double x = parseNumber(point);
-        double h = 0.0001;
-        
-        std::ostringstream visual;
-        visual << "Numerical Derivative\n";
-        visual << "d/dx (" << expression << ") at x = " << point << "\n\n";
-        
-        // Using central difference formula: f'(x) ≈ (f(x+h) - f(x-h)) / (2h)
-        auto f = [](double x) { return x * x; }; // Example: f(x) = x^2
-        
-        double f_plus = f(x + h);
-        double f_minus = f(x - h);
-        double derivative = (f_plus - f_minus) / (2 * h);
-        
-        visual << "Using central difference method:\n";
-        visual << "f'(" << formatNumber(x) << ") ≈ ";
-        visual << "[f(" << formatNumber(x + h) << ") - f(" << formatNumber(x - h) << ")] / (2 × " << h << ")\n";
-        visual << "f'(" << formatNumber(x) << ") ≈ (" << formatNumber(f_plus) << " - " 
-               << formatNumber(f_minus) << ") / " << formatNumber(2 * h) << "\n";
-        visual << "f'(" << formatNumber(x) << ") ≈ " << formatNumber(derivative) << "\n";
-        
-        steps.push_back({visual.str(), "", 0});
-        return formatNumber(derivative);
-    }
-    
-    std::vector<Step> getSteps() {
-        return steps;
-    }
-    
-    void clearSteps() {
-        steps.clear();
-    }
-};
+        // Resize handler
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / 200;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, 200);
+        });
+    </script>
+</body>
+</html>
+"""
+
+components.html(webgl_html, height=220)
+
+# Footer
+st.markdown("---")
+st.markdown("""
+<div style="text-align: center; color: #666;">
+    <p>🧮 HandCalc Pro v1.0 - Manual Arithmetic Visualizer</p>
+    <p>Watch your calculations come to life with step-by-step manual methods!</p>
+</div>
+""", unsafe_allow_html=True)

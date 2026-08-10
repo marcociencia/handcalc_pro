@@ -1,4 +1,4 @@
-# app.py – Fully corrected, division with remainder, derivative bug fixed, LaTeX support
+# app.py – Fully corrected, division fixed, session state refresh for solver, '+' sign in multiplication
 import streamlit as st
 import streamlit.components.v1 as components
 import math
@@ -108,8 +108,11 @@ class MathSolver:
         lines.append(("× " + s2).rjust(max_w))
         lines.append("─" * max_w)
         if len(s2) > 1:
-            for p in partials_rev:
-                lines.append(str(p).rjust(max_w))
+            for idx, p in enumerate(partials_rev):
+                if idx == len(partials_rev) - 1:
+                    lines.append(("+ " + str(p)).rjust(max_w))
+                else:
+                    lines.append(str(p).rjust(max_w))
             lines.append("─" * max_w)
         lines.append(str(result).rjust(max_w))
         display_text = "\n".join(lines)
@@ -175,7 +178,7 @@ class MathSolver:
                 return '\n'.join(html)
 
             x_sol = -b / a
-            html.append(f'$$x = \frac{{{-b}}}{{{a}}} = {latex(sp.nsimplify(x_sol))}$$<br>')
+            html.append(f'$$x = \\frac{{{-b}}}{{{a}}} = {latex(sp.nsimplify(x_sol))}$$<br>')
             html.append(f'<div class="result-box">🎯 <strong>Result: $x = {latex(sp.nsimplify(x_sol))}$</strong></div>')
             html.append('</div>')
             return '\n'.join(html)
@@ -190,7 +193,7 @@ class MathSolver:
             html.append('<p><b>ax² + bx + c = 0</b></p></div>')
 
             if '=' in func_str:
-                left_str, right_str = func_str.split('=')
+                left_str, right_str = eq_str = func_str.split('=') if '=' in func_str else (func_str, '')
                 expr = expand(self.parse_func(left_str) - self.parse_func(right_str))
             else:
                 expr = expand(self.parse_func(func_str))
@@ -316,8 +319,8 @@ class MathSolver:
             return f"<div class='step-box'>❌ Error calculating integral: {str(e)}</div>"
 
 # ---------- Streamlit UI ----------
-if 'solver' not in st.session_state:
-    st.session_state.solver = MathSolver()
+st.session_state.solver = MathSolver()
+
 if 'result_html' not in st.session_state:
     st.session_state.result_html = ""
 if 'history' not in st.session_state:

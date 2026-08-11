@@ -2,11 +2,20 @@
 import streamlit as st
 import sympy as sp
 import numpy as np
-from sympy import symbols, Eq, solve, Poly
+from sympy import symbols, sympify, Eq, solve, sqrt, diff, integrate, latex, Poly, factor, expand
 from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application, convert_xor
+import re
 
-st.set_page_config(page_title="Advanced Step-by-Step Math Solver", page_icon="🧮", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(
+    page_title="Advanced Step-by-Step Math Solver",
+    page_icon="🧮",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Transformations for parsing like 2x, 2^3 etc
 transformations = standard_transformations + (implicit_multiplication_application, convert_xor)
+
 x, y, z, t = sp.symbols('x y z t')
 SYMBOL_MAP = {'x': x, 'y': y, 'z': z, 't': t}
 
@@ -14,7 +23,7 @@ def safe_parse(expr_str: str, var=x):
     try:
         expr_str = expr_str.replace('^', '**')
         return parse_expr(expr_str, transformations=transformations, local_dict=SYMBOL_MAP)
-    except:
+    except Exception as e:
         return None
 
 def theory_box(title, content_md):
@@ -27,377 +36,946 @@ def step_header(n, title, desc=""):
     if desc:
         st.markdown(desc)
 
-# ================= CORRECTED MULTIPLICATION LOGIC =================
-def get_pos_mapping(a_str, b_str):
-    # positions from right 0 = units
-    # multiplicand a occupies pos 0..len(a)-1
-    # multiplier b occupies pos 0..len(b)-1
-    # max pos for final product = len(a)+len(b) maybe
-    return max(len(a_str), len(b_str)) + len(b_str)
+# ================= LONG ARITHMETIC HELPERS (Handwritten Style) =================
+def get_digits(n):
+    return list(map(int, str(abs(n))))
 
-def render_multiplication_corrected_html(a,b):
-    """Correct positioning as user described:
-    - multiplier digit 3 below multiplicand 2 (units aligned)
-    - 3x5=15 -> 5 descends and 1 orange above multiplicand 1
-    - product 760: 0 aligned to multiplier 5 (below 456), then 76 left of 0
-    - product 152: 2 aligned to multiplier 1 (below 760), 15 left of 2
-    """
-    if b==0 or a==0:
-        return f'<div style="font-family:monospace; font-size:28px">{a} × {b} = 0</div>'
-    a = abs(int(a)); b = abs(int(b))
-    a_str = str(a)
-    b_str = str(b)
-    a_digits = list(map(int, a_str))  # left to right
-    b_digits = list(map(int, b_str))  # left to right
-    b_rev = b_digits[::-1]  # right to left: units first
+def long_addition_steps(a,b):
+    # returns steps from right to left
+    a_str, b_str = str(abs(a)), str(abs(b))
+    max_len = max(len(a_str), len(b_str))
+    a_str = a_str.zfill(max_len)
+    b_str = b_str.zfill(max_len)
+    carry = 0
+    steps = [] # each: {da, db, carry_in, sum, write, carry_out}
+    for i in range(max_len-1, -1, -1):
+        da = int(a_str[i]); db = int(b_str[i])
+        s = da+db+carry
+        steps.insert(0, {"da":da, "db":db, "carry_in":carry, "sum":s, "write":s%10, "carry_out":s//10})
+        carry = s//10
+    if carry>0:
+        steps.insert(0, {"da":0,"db":0,"carry_in":0,"sum":carry,"write":carry,"carry_out":0})
+    return steps
 
-    n_a = len(a_str)
-    n_b = len(b_str)
-    max_pos = n_a + n_b  # enough columns
-    # positions 0..max_pos-1 from right (0=rightmost)
-    # We'll create grid rows as dict pos->char
-
-    # Helper to create empty row
-    def empty_row():
-        return {p: "" for p in range(max_pos)}
-
-    # Rows list in order top to bottom
-    rows = []  # each row = {"type": "carry"/"num"/"line", "data": dict pos->str, "color_data": dict pos->color, "small": bool}
-
-    # --- Carry rows and multiplicand ---
-    # We will process partials and collect carries
-    partials = []  # list of dicts {pos->digit, value, b_digit, carries: list of (pos, value)}
-    all_carries_for_top = []  # for first partials above multiplicand? Actually we will interleave
-
-    # For each partial
-    for p_idx, bd in enumerate(b_rev):
-        pos_offset = p_idx  # rightmost digit of this partial aligned under multiplier digit at pos p_idx
-        carry = 0
-        partial_row = {}
-        carries_this_partial = []  # list of {pos, value}
-        # Process a_digits from right to left
-        # a_digits right to left
-        for j in range(n_a-1, -1, -1):
-            ad = int(a_str[j])
-            # position of this ad in overall pos system:
-            # ad at position (n_a-1 - j) from right? Actually a_str rightmost is pos0
-            # So ad at pos = (n_a-1 - j)
-            # But partial's digit for this ad should be at pos = (n_a-1 - j) + pos_offset
-            a_pos = (n_a-1 - j)  # 0 for rightmost of a
-            # For partial product, the digit we write for this ad*bd is at position a_pos + pos_offset
-            prod = ad * bd + carry
-            write = prod % 10
-            new_carry = prod // 10
-            write_pos = a_pos + pos_offset
-            partial_row[write_pos] = str(write)
-            if new_carry > 0:
-                # carry goes to next left position: write_pos+1
-                carries_this_partial.append({"pos": write_pos+1, "value": new_carry})
-            carry = new_carry
-        if carry > 0:
-            # Extra leading digit beyond a length
-            extra_pos = n_a + pos_offset
-            # If carry is >9, split digits (rare)
-            extra_str = str(carry)
-            # For simplicity, if carry is multi-digit, place digits left to right
-            for k, ch in enumerate(reversed(extra_str)):  # rightmost of extra at extra_pos
-                partial_row[extra_pos + k] = ch
-            # No further carry
-
-        partials.append({
-            "b_digit": bd,
-            "pos_offset": pos_offset,
-            "row": partial_row,
-            "carries": carries_this_partial,
-            "value": a * bd
-        })
-
-    # Now build visual rows in exact order as image:
-    # 1. Carry row for first partial (p_idx=0) - only its carries, placed above multiplicand
-    # 2. Multiplicand row (152)
-    # 3. Multiplier row (X 153)
-    # 4. Line
-    # 5. Partial 0 row (456)
-    # 6. Carry row for partial 1 (2 1) above 760
-    # 7. Partial 1 row (760)
-    # 8. Partial 2 row (+152)
-    # 9. Line
-    # 10. Final result row (23256)
-
-    # Helper to render a row dict pos->char as HTML flex from leftmost max_pos down to 0
-    def render_row_html(row_dict, color_dict=None, small=False, is_plus=False, extra_left_char=""):
-        # Find max pos used
-        # Render from max_pos-1 down to 0 left to right? Actually leftmost is highest pos
-        # We'll render flex with columns from max_pos-1 to 0
-        # Determine max pos to display: max of keys in row_dict or max_pos
-        display_max = max_pos -1
-        # For simplicity, render from display_max down to 0
-        html = '<div style="display:flex; justify-content:flex-start; font-family:monospace; '
-        if small:
-            html += 'font-size:18px; color:#E67E22; font-weight:bold; min-height:22px; '
+def render_addition_html(a,b):
+    steps = long_addition_steps(a,b)
+    # Build HTML mimicking handwritten addition with orange carries
+    # Carries row
+    # We'll create monospace table
+    a_str = str(a); b_str = str(b)
+    # For visual, we need carry row above: the carry_out of each step (except last) shown above next left digit
+    # In addition, carry_out becomes carry_in of left neighbor
+    # Show as orange small numbers
+    html = '<div style="font-family: monospace; font-size:32px; line-height:1.1; background:#fff; padding:15px; display:inline-block; border-radius:8px; border:1px solid #ddd">'
+    # Carry row
+    html += '<div style="color:#E67E22; font-size:18px; letter-spacing:8px; text-align:right; padding-right:5px; min-height:22px">'
+    # carries are the carry_in for each position, show if >0
+    for stp in steps:
+        if stp["carry_in"]>0:
+            html += f'<span style="display:inline-block; width:18px">{stp["carry_in"]}</span>'
         else:
-            html += 'font-size:32px; '
-        html += 'letter-spacing:0px">'
-        for pos in range(display_max, -1, -1):
-            ch = row_dict.get(pos, "")
-            col = ""
-            if color_dict and pos in color_dict:
-                col = color_dict[pos]
-            style = f'width:32px; text-align:center; color:{col if col else ("#E67E22" if small else "black")};'
-            if ch == "" :
-                html += f'<div style="{style}">&nbsp;</div>'
-            else:
-                if is_plus and pos == min(row_dict.keys()):
-                    # Actually plus sign is separate left of row
-                    pass
-                html += f'<div style="{style}">{ch}</div>'
-        html += '</div>'
-        return html
+            html += '<span style="display:inline-block; width:18px">&nbsp;</span>'
+    html += '</div>'
+    html += f'<div style="text-align:right; letter-spacing:8px">{a}</div>'
+    html += f'<div style="text-align:right; letter-spacing:8px; border-bottom:2px solid black; padding-bottom:4px">+ {b}</div>'
+    # Result
+    result = a+b
+    html += f'<div style="text-align:right; letter-spacing:8px; padding-top:4px">{result}</div>'
+    html += '</div>'
+    # Detailed textual steps
+    detail_html = '<div style="margin-top:15px; font-family: sans-serif; font-size:16px">'
+    detail_html += '<b>Step-by-step (right to left):</b><br>'
+    for idx, stp in enumerate(reversed(steps)):
+        pos = len(steps)-idx
+        detail_html += f'Column {pos}: {stp["da"]} + {stp["db"]} + carry {stp["carry_in"]} = {stp["sum"]} → write {stp["write"]}, carry {stp["carry_out"]}<br>'
+    detail_html += '</div>'
+    return html + detail_html
 
-    # More precise rendering using grid where we control order left to right = highest pos to 0
-    # Build rows as per image logic
-
-    html_output = '<div style="background:#fff; padding:20px; display:inline-block; border-radius:12px; border:1px solid #ddd">'
-
-    # 1. Top carry row for first partial (p_idx=0)
-    # First partial carries: from partials[0]["carries"]
-    if partials and partials[0]["carries"]:
-        carry_row_dict = {}
-        for c in partials[0]["carries"]:
-            carry_row_dict[c["pos"]] = str(c["value"])
-        # Render small orange
-        html_output += '<div style="display:flex; justify-content:flex-start; font-family:monospace; font-size:18px; color:#E67E22; font-weight:bold; min-height:22px">'
-        for pos in range(max_pos-1, -1, -1):
-            ch = carry_row_dict.get(pos, "")
-            html_output += f'<div style="width:32px; text-align:center">{ch if ch else "&nbsp;"}</div>'
-        html_output += '</div>'
-
-    # 2. Multiplicand row 152 - right aligned (pos 0..n_a-1)
-    html_output += '<div style="display:flex; justify-content:flex-start; font-family:monospace; font-size:32px">'
-    for pos in range(max_pos-1, -1, -1):
-        if pos < n_a:
-            # a digit at pos
-            a_pos = pos
-            # a_str index from right: a_str[ n_a-1 - a_pos ] if a_pos < n_a
-            if a_pos < n_a:
-                ch = a_str[n_a-1 - a_pos]
-            else:
-                ch = ""
-        else:
-            ch = ""
-        html_output += f'<div style="width:32px; text-align:center">{ch if ch else "&nbsp;"}</div>'
-    html_output += '</div>'
-
-    # 3. Multiplier row X 153 - with X on left of number? In image X is left of 153
-    html_output += '<div style="display:flex; justify-content:flex-start; font-family:monospace; font-size:32px">'
-    for pos in range(max_pos-1, -1, -1):
-        if pos == n_a:  # place X one column left of multiplicand?
-            ch = "X"
-        elif pos < n_b:
-            ch = b_str[n_b-1 - pos] if pos < n_b else ""
-        else:
-            ch = "&nbsp;"
-        # Actually we want X at position n_a (just left of multiplicand)
-        # Let's handle: if pos == n_a, X, else if pos < n_b, digit of b
-        if pos == n_a:
-            html_output += f'<div style="width:32px; text-align:center">X</div>'
-        elif pos < n_b:
-            ch = b_str[n_b-1 - pos]
-            html_output += f'<div style="width:32px; text-align:center">{ch}</div>'
-        else:
-            html_output += f'<div style="width:32px; text-align:center">&nbsp;</div>'
-    html_output += '</div>'
-
-    # 4. Line
-    html_output += f'<div style="border-top:3px solid black; margin:6px 0; width:{max_pos*32}px"></div>'
-
-    # 5. Partial 0 row 456 - pos_offset 0
-    p0 = partials[0]
-    html_output += '<div style="display:flex; justify-content:flex-start; font-family:monospace; font-size:30px">'
-    for pos in range(max_pos-1, -1, -1):
-        ch = p0["row"].get(pos, "")
-        # Color logic: if this digit was computed with carry_in >0, color it orange? For first partial, 4 is result of 3+1, so should be blue/orange? In image 456 all black? Actually image shows 456 black? In your latest image 456 is black, 760 black, +152 black. So we keep black for partial digits, orange only for small carries.
-        html_output += f'<div style="width:32px; text-align:center">{ch if ch else "&nbsp;"}</div>'
-    html_output += '</div>'
-
-    # 6. Carry row for partial 1 (2 1) - above 760
-    if len(partials) > 1:
-        p1_carries = partials[1]["carries"]
-        carry_dict = {c["pos"]: str(c["value"]) for c in p1_carries}
-        html_output += '<div style="display:flex; justify-content:flex-start; font-family:monospace; font-size:18px; color:#E67E22; font-weight:bold; min-height:22px">'
-        for pos in range(max_pos-1, -1, -1):
-            ch = carry_dict.get(pos, "")
-            html_output += f'<div style="width:32px; text-align:center">{ch if ch else "&nbsp;"}</div>'
-        html_output += '</div>'
-
-    # 7. Partial 1 row 760 - pos_offset 1
-    if len(partials) > 1:
-        p1 = partials[1]
-        html_output += '<div style="display:flex; justify-content:flex-start; font-family:monospace; font-size:30px">'
-        for pos in range(max_pos-1, -1, -1):
-            ch = p1["row"].get(pos, "")
-            html_output += f'<div style="width:32px; text-align:center">{ch if ch else "&nbsp;"}</div>'
-        html_output += '</div>'
-
-    # 8. Partial 2 row +152 - pos_offset 2, with + sign
-    if len(partials) > 2:
-        p2 = partials[2]
-        html_output += '<div style="display:flex; justify-content:flex-start; font-family:monospace; font-size:30px">'
-        for pos in range(max_pos-1, -1, -1):
-            if pos == p2["pos_offset"]-1:  # place + just left of rightmost? Actually image shows +152 with + at left of 152
-                # For simplicity, put + at position pos_offset-1? Let's put + at pos = pos_offset-1? For p2 pos_offset=2, + at pos1? But image shows + at left of 152, which is at pos4? Actually 152 occupies pos2,3,4, + should be at pos1? Let's check image: +152 row shows + at left of 1? In image +152 has + just left of 1? Actually +152 shows + at same column as leftmost? We'll put + at one position left of leftmost digit of this partial
-                pass
-            ch = p2["row"].get(pos, "")
-            # Add + sign at leftmost-1 position
-            if pos == p2["pos_offset"] + n_a:  # one left of leftmost digit
-                html_output += f'<div style="width:32px; text-align:center">+</div>'
-            else:
-                html_output += f'<div style="width:32px; text-align:center">{ch if ch else "&nbsp;"}</div>'
-        # Simpler: render with + prefix
-        html_output += '</div>'
-        # Actually redo with + included
-        # We'll recreate this row correctly with + sign
-        # Remove last added row and redo
-        html_output = html_output[:-6]  # hack to remove last div close? Let's just append another correct row
-        # Correct row for +152
-        html_output += '<div style="display:flex; justify-content:flex-start; font-family:monospace; font-size:30px">'
-        for pos in range(max_pos-1, -1, -1):
-            if pos == max(p2["row"].keys())+1:
-                html_output += f'<div style="width:32px; text-align:center">+</div>'
-            else:
-                ch = p2["row"].get(pos, "")
-                html_output += f'<div style="width:32px; text-align:center">{ch if ch else "&nbsp;"}</div>'
-        html_output += '</div>'
-
-    # 9. Line
-    html_output += f'<div style="border-top:3px solid black; margin:8px 0; width:{max_pos*32}px"></div>'
-
-    # 10. Final result
-    final_val = a*b
-    final_str = str(final_val)
-    # final occupies pos 0..len(final_str)-1
-    html_output += '<div style="display:flex; justify-content:flex-start; font-family:monospace; font-size:32px; font-weight:bold">'
-    for pos in range(max_pos-1, -1, -1):
-        if pos < len(final_str):
-            ch = final_str[len(final_str)-1 - pos]
-            html_output += f'<div style="width:32px; text-align:center">{ch}</div>'
-        else:
-            html_output += f'<div style="width:32px; text-align:center">&nbsp;</div>'
-    html_output += '</div>'
-
-    html_output += '</div>'
-
-    # Explanation
-    detail = '<div style="margin-top:16px; font-family:sans-serif; font-size:14px; background:#f9fafb; padding:12px; border-radius:8px">'
-    detail += f'<b>Positioning logic (as you described):</b><br>'
-    detail += f'• Multiplier digit 3 (below multiplicand 2, units) × 5 =15 → 5 descends, <span style="color:#E67E22">1 orange</span> above multiplicand 1<br>'
-    detail += f'• Product 760: <b>0 aligned to multiplier 5</b> (below 456), then 76 left of 0<br>'
-    detail += f'• Product 152: <b>2 aligned to multiplier 1</b> (below 760), 15 left of 2<br>'
-    detail += f'• Staircase sum → {final_val}<br>'
+def render_subtraction_html(a,b):
+    # assume a>=b for simplicity, else show negative
+    if a < b:
+        neg = True
+        a,b = b,a
+    else:
+        neg=False
+    a_str = str(a); b_str = str(b).zfill(len(a_str))
+    borrow = 0
+    steps = []
+    result_digits = []
+    for i in range(len(a_str)-1, -1, -1):
+        da = int(a_str[i])
+        db = int(b_str[i]) if i>= len(a_str)-len(b_str) else 0
+        da_eff = da - borrow
+        need_borrow = 1 if da_eff < db else 0
+        if need_borrow:
+            da_eff += 10
+        write = da_eff - db
+        steps.insert(0, {"da":da, "db":db, "borrow_in":borrow, "da_eff":da_eff, "write":write, "borrow_out":need_borrow})
+        result_digits.insert(0, str(write))
+        borrow = need_borrow
+    result = int(''.join(result_digits))
+    html = '<div style="font-family: monospace; font-size:32px; line-height:1.1; background:#fff; padding:15px; display:inline-block; border-radius:8px; border:1px solid #ddd">'
+    # Borrow row (orange)
+    html += '<div style="color:#E67E22; font-size:18px; letter-spacing:8px; text-align:right; min-height:22px">'
+    for stp in steps:
+        html += f'<span style="display:inline-block; width:18px">{stp["borrow_in"] if stp["borrow_in"] else "&nbsp;"}</span>'
+    html += '</div>'
+    html += f'<div style="text-align:right; letter-spacing:8px">{a_str}</div>'
+    html += f'<div style="text-align:right; letter-spacing:8px; border-bottom:2px solid black">- {b_str.lstrip("0") or "0"}</div>'
+    html += f'<div style="text-align:right; letter-spacing:8px; padding-top:4px">{"-" if neg else ""}{result}</div>'
+    html += '</div>'
+    detail = '<div style="margin-top:15px; font-family:sans-serif; font-size:16px"><b>Borrow logic (right to left):</b><br>'
+    for stp in reversed(steps):
+        detail += f'{stp["da"]} - borrow {stp["borrow_in"]} = {stp["da"]-stp["borrow_in"]} ; {stp["da"]-stp["borrow_in"]} < {stp["db"]} ? borrow 10 → {stp["da_eff"]} - {stp["db"]} = {stp["write"]}<br>'
     detail += '</div>'
+    return html+detail
 
-    return html_output + detail
+def long_multiplication_steps(a,b):
+    a = abs(a); b = abs(b)
+    a_digits = list(map(int, str(a)))
+    b_digits = list(map(int, str(b)))[::-1] # right to left
+    partials = []
+    carries_list = [] # list of carry arrays per partial
+    for bd in b_digits:
+        carry=0
+        partial_digits=[]
+        carries=[]
+        for ad in reversed(a_digits):
+            prod = ad*bd + carry
+            partial_digits.insert(0, prod%10)
+            carries.insert(0, carry) # carry used for this digit? Actually carry is from previous, we store new carry for next
+            carry = prod//10
+        if carry>0:
+            partial_digits.insert(0, carry)
+            carries.insert(0, 0)
+        partials.append(int(''.join(map(str,partial_digits))) if partial_digits else 0)
+        carries_list.append(carries)
+    return partials, carries_list, a_digits, b_digits
+
+def render_multiplication_html(a,b):
+    partials, carries_list, a_digits, b_digits = long_multiplication_steps(a,b)
+    b_str = str(b); a_str = str(a)
+    html = '<div style="font-family: monospace; font-size:30px; line-height:1.15; background:#fff; padding:18px; display:inline-block; border-radius:10px; border:1px solid #ddd">'
+    # Show carries for first partial as example like image - orange small numbers on top
+    # We'll show topmost carry row for first partial if exists
+    if carries_list and any(c>0 for c in carries_list[0]):
+        html += '<div style="color:#E67E22; font-size:18px; letter-spacing:8px; text-align:right; min-height:20px">'
+        # align carries over a_digits
+        for c in carries_list[0]:
+            html += f'<span style="display:inline-block; width:18px">{c if c>0 else "&nbsp;"}</span>'
+        html += '</div>'
+    html += f'<div style="text-align:right; letter-spacing:8px">{a_str}</div>'
+    html += f'<div style="text-align:right; letter-spacing:8px; border-bottom:2px solid black">X {b_str}</div>'
+    # Show partials
+    for idx, p in enumerate(partials):
+        shift = ' ' * idx  # actually we need left padding? For right alignment, shift is trailing spaces? We'll use margin-left
+        # In long multiplication, partials are shifted left by idx
+        # For display right-aligned, we add spaces on right? Simpler: show with indentation from left? But we want right aligned with increasing left shift?
+        # Traditional: first partial right aligned, second shifted one to left (one zero at end), etc.
+        # We'll display with &nbsp; on right for shift? Actually easier: display as number with left padding decreasing?
+        # Let's display each partial right-aligned with offset
+        if idx==0:
+            html += f'<div style="text-align:right; letter-spacing:8px; color:#222">{p}</div>'
+        else:
+            # add small orange carry indicator for this partial if needed (like image shows 1 above)
+            if len(carries_list)>idx and any(c>0 for c in carries_list[idx]):
+                html += '<div style="color:#E67E22; font-size:18px; letter-spacing:8px; text-align:right; min-height:20px">'
+                # align over a part
+                for c in carries_list[idx]:
+                    html += f'<span style="display:inline-block; width:18px">{c if c>0 else "&nbsp;"}</span>'
+                html += f'<span style="display:inline-block; width:{idx*18}px"></span></div>'
+            # show + for second onward like image? Use + for second and beyond except first?
+            prefix = '+' if idx==len(partials)-1 and len(partials)>1 else '&nbsp;'
+            # second partial in example had "1" above and "+15"
+            if idx==1 and len(partials)>1:
+                html += f'<div style="text-align:right; letter-spacing:8px; color:#222">{prefix}{p}{"0"* (idx-1) if idx>0 else ""}</div>'
+            else:
+                # For general, multiply partial by 10**idx for value, but display without zeros as image does
+                display_val = str(p) + ("0"*idx if idx>0 and len(str(b))>1 else "")
+                # If we already include shift as zeros, don't double
+                if idx>0:
+                    # partials already are a*digit, we need to show shifted: e.g., 152*5=760, shift 1 -> 7600? Actually 760*10 =7600 but image shows 760 not 7600? In image Ex2, second partial 760 is shown as 760 (with extra space) not 7600, third as 152.
+                    # To match image style (they don't show trailing zero), we show p with offset spaces on left? Let's just show p with left offset via padding-right
+                    html += f'<div style="text-align:right; letter-spacing:8px; color:#222"><span style="margin-right:{idx*8}px">{prefix}{p}</span></div>'
+                else:
+                    html += f'<div style="text-align:right; letter-spacing:8px; color:#222">{display_val}</div>'
+
+    html += '<div style="border-top:2px solid black; margin-top:4px; text-align:right; letter-spacing:8px; padding-top:4px; font-weight:bold">'
+    html += f'{a*b}</div>'
+    html += '</div>'
+
+    # Detailed steps text
+    detail = '<div style="margin-top:15px; font-family:sans-serif; font-size:15px"><b>Detailed multiplication breakdown:</b><br>'
+    for idx, bd in enumerate(b_digits):
+        detail += f'Partial {idx+1}: {a} × {bd} (digit {idx+1} of {b} from right)<br>'
+        carry=0
+        for j, ad in enumerate(reversed(a_digits)):
+            prod = ad*bd + carry
+            detail += f'&nbsp;&nbsp;{ad}×{bd} + carry {carry} = {ad*bd}+{carry}={prod} → write {prod%10}, carry {prod//10}<br>'
+            carry = prod//10
+        if carry:
+            detail += f'&nbsp;&nbsp;Final carry {carry} written at front → partial = {partials[idx]}<br>'
+        detail += f'→ Partial product = {partials[idx]} (shifted {idx} positions = {partials[idx] * (10**idx)})<br><br>'
+    detail += f'<b>Sum of shifted partials:</b> {" + ".join([str(p*(10**i)) for i,p in enumerate(partials)])} = {a*b}'
+    detail += '</div>'
+    return html+detail
+
+def long_division_steps(dividend, divisor):
+    dividend = abs(dividend); divisor = abs(divisor)
+    s_dividend = str(dividend)
+    steps=[]
+    current=0
+    quotient_digits=[]
+    for i,ch in enumerate(s_dividend):
+        current = current*10 + int(ch)
+        q = current // divisor
+        prod = q*divisor
+        rem = current - prod
+        steps.append({"current":current, "q":q, "prod":prod, "rem":rem, "digit_index":i})
+        quotient_digits.append(str(q))
+        current = rem
+    quotient = int(''.join(quotient_digits)) if quotient_digits else 0
+    return steps, quotient
+
+def render_division_html(dividend, divisor):
+    if divisor==0:
+        return '<div style="color:red">Division by zero not allowed</div>'
+    steps, quotient = long_division_steps(dividend, divisor)
+    remainder = steps[-1]["rem"] if steps else 0
+    # Build visual like keyhole division
+    html = '<div style="font-family: monospace; font-size:30px; background:#fff; padding:18px; display:inline-block; border-radius:10px; border:1px solid #ddd">'
+    html += '<div style="display:flex">'
+    # Left side
+    html += '<div style="padding-right:20px; text-align:right">'
+    html += f'<div style="color:black; letter-spacing:4px">{dividend}<span style="display:inline-block; width:30px; border-left:3px solid black; border-bottom:3px solid black; margin-left:10px; padding-left:10px; color:black">{divisor}</span></div>'
+    # Now steps left column under dividend
+    # We need to show the subtraction chain
+    for idx, st in enumerate(steps):
+        # Show -prod in orange and remainder below
+        # For first where current < divisor and q==0 and not first digit? Skip showing?
+        if st["q"]==0 and st["current"] < divisor and idx==0 and len(str(dividend))>1:
+            continue
+        html += f'<div style="color:#E67E22; letter-spacing:4px; text-align:right; margin-top:2px">-{st["prod"]}</div>'
+        html += f'<div style="border-top:2px solid #E67E22; color:#E67E22; margin:2px 0"></div>'
+        # Show next current (which is rem*10 + next digit) as orange, but we show as st["rem"] combined with next digit? Simpler show remainder then next digit brought down as e.g., 15, 06
+        if idx < len(steps)-1:
+            next_current = steps[idx+1]["current"]
+            # Format with leading zero if needed like 06 in image
+            # Show as two digits if original had zero
+            html += f'<div style="color:#E67E22; letter-spacing:4px; text-align:right">{next_current:02d}</div>' if next_current<10 and len(str(dividend))>1 else f'<div style="color:#E67E22; letter-spacing:4px; text-align:right">{next_current}</div>'
+    # Last remainder
+    html += f'<div style="color:#E67E22; letter-spacing:4px; text-align:right; border-top:2px solid #E67E22; margin-top:4px; padding-top:2px">{remainder:02d}</div>'
+    html += '</div>'
+    # Right side quotient
+    html += f'<div style="padding-left:0; margin-left:-20px; padding-top:0"><div style="color:#E67E22; font-size:30px; margin-left:45px; margin-top:40px">{quotient}</div></div>'
+    html += '</div>' # flex
+    html += '</div>'
+
+    # Textual breakdown
+    detail = '<div style="margin-top:15px; font-family:sans-serif; font-size:15px"><b>Long Division Steps (like school):</b><br>'
+    for st in steps:
+        detail += f'Bring down → current = {st["current"]}, {st["current"]} ÷ {divisor} = {st["q"]} (since {st["q"]}×{divisor}={st["prod"]}), remainder {st["current"]}-{st["prod"]}={st["rem"]}<br>'
+    detail += f'<b>Result: {dividend} ÷ {divisor} = {quotient} remainder {remainder}</b><br>Check: {divisor}×{quotient}+{remainder} = {divisor*quotient+remainder}'
+    detail += '</div>'
+    return html+detail
 
 # ================= SIDEBAR =================
 with st.sidebar:
     st.title("🧮 Math Solver Pro")
-    st.caption("Detailed step-by-step solver")
+    st.caption("Detailed step-by-step solver with theory")
     mode = st.radio(
         "Choose Solver:",
         ["Basic Arithmetic (Long Method)", "First-Degree Equation", "Second-Degree Equation", "Linear Systems", "Derivative", "Integral"],
         index=0
     )
+    st.divider()
+    st.markdown("**How to write expressions:**")
+    st.code("2*x + 3\nx^2 + 3*x + 2\nsin(x) + x**2\n1/(x+1)\nexp(x), sqrt(x), log(x)")
+    st.info("All explanations are in English as requested. The solver shows every algebraic manipulation.")
 
-# ================= BASIC ARITHMETIC =================
+# ================= 0 - BASIC ARITHMETIC (Long Method like image) =================
 if mode == "Basic Arithmetic (Long Method)":
-    st.title("🔢 Multiplication - Corrected Positioning")
-    theory_box("Exact Positioning Rule (from your image)",
+    st.title("🔢 Basic Arithmetic - Handwritten Long Method")
+    theory_box("Basic Arithmetic Operations - Long Method",
     r"""
-**Rule you described:**
-- Multiplier digit $3$ is below multiplicand $2$ (units).
-- $3 \times 5 =15$: descend $5$, orange $1$ above multiplicand $1$.
-- Product $760$: $0$ aligned to multiplier $5$ (below $456$), then $76$ left of $0$.
-- Product $152$: $2$ aligned to multiplier $1$ (below $760$), $15$ left of $2$.
-- Orange small numbers are carries elevated to left unit.
-    """)
-    col_a, col_b = st.columns(2)
-    a_in = col_a.number_input("Multiplicand (top) - e.g., 152", value=152, min_value=0, max_value=999999)
-    b_in = col_b.number_input("Multiplier (bottom) - e.g., 153", value=153, min_value=0, max_value=999999)
-    if st.button("Show Handwritten Multiplication", type="primary"):
-        st.markdown(render_multiplication_corrected_html(a_in, b_in), unsafe_allow_html=True)
+**Definition:** Basic arithmetic operations are the foundation of all mathematics: addition, subtraction, multiplication, and division.
 
-# ================= FIRST DEGREE =================
-elif mode == "First-Degree Equation":
+**1. Addition:** Combining two quantities. Algorithm: Add digits from right to left (units, tens, hundreds), carry over if sum ≥ 10.
+$$ \text{Example: } 15 + 15: 5+5=10 \text{ write 0 carry 1, } 1+1+1=3 \rightarrow 30 $$
+
+**2. Subtraction:** Finding the difference. Algorithm: Subtract right to left, borrow 10 from next left column if top digit < bottom digit.
+
+**3. Multiplication:** Repeated addition. Long method:
+- Multiply top number by each digit of bottom number (right to left), tracking carries (small orange numbers on top like in your image).
+- Each partial product is shifted left by its position.
+- Sum all shifted partials to get final product.
+$$ 15 \times 15: 15×5=75, 15×1=15 \text{ (shifted)}, 75+150=225 $$
+
+**4. Division (Keyhole Method):** As shown in your image (756 ÷ 3):
+- Dividend on left, divisor on right with L-shaped symbol.
+- Take first digits of dividend, divide by divisor to get quotient digit, multiply back, subtract (shown in orange -6, -15...), bring down next digit (15, 06), repeat.
+- Final remainder is last orange number (00 means exact division).
+$$ 756 ÷ 3 = 252 \text{ remainder } 0 \text{ because } 3×252=756 $$
+
+**Why orange numbers?** In the handwritten method, orange (or small) numbers are carries/borrows and intermediate subtractions - they are the thinking steps that are usually erased but we keep visible for learning.
+    """)
+
+    st.subheader("Choose Operation")
+    op = st.selectbox("Operation", ["Addition (+)", "Subtraction (-)", "Multiplication (×) - Like Image Ex1/Ex2", "Division (÷) - Like Image Division"], index=2)
+
+    col_a, col_b = st.columns(2)
+    a_in = col_a.number_input("First Number (A)", value=756, min_value=0, max_value=999999, step=1)
+    b_in = col_b.number_input("Second Number (B)", value=3, min_value=0, max_value=999999, step=1)
+
+    if op == "Multiplication (×) - Like Image Ex1/Ex2":
+        st.markdown("#### Example from your image:")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Ex1: 15 × 15 = 225**")
+            st.markdown(render_multiplication_html(15,15), unsafe_allow_html=True)
+        with c2:
+            st.markdown("**Ex2: 152 × 153 = 23256**")
+            st.markdown(render_multiplication_html(152,153), unsafe_allow_html=True)
+
+    if op == "Division (÷) - Like Image Division":
+        st.markdown("#### Example from your image:")
+        st.markdown("**Ex1: 756 ÷ 3 = 252** (exactly like your screenshot)")
+        st.markdown(render_division_html(756,3), unsafe_allow_html=True)
+
+    st.divider()
+    st.subheader(f"Your Calculation: {a_in} {op} {b_in}")
+
+    if st.button("Calculate with Handwritten Steps", type="primary"):
+        if op == "Addition (+)":
+            st.markdown("### ➕ Addition - Long Method")
+            st.markdown(render_addition_html(a_in, b_in), unsafe_allow_html=True)
+        elif op == "Subtraction (-)":
+            st.markdown("### ➖ Subtraction - Long Method with Borrowing")
+            st.markdown(render_subtraction_html(a_in, b_in), unsafe_allow_html=True)
+        elif op == "Multiplication (×) - Like Image Ex1/Ex2":
+            st.markdown("### ✖️ Multiplication - Long Method (like your image)")
+            st.markdown(render_multiplication_html(a_in, b_in), unsafe_allow_html=True)
+            st.markdown("---")
+            st.markdown("**Algebraic Theory:** Multiplication distributes: $a×b = a×(b_0 + 10 b_1 + 100 b_2...) = a b_0 + 10 a b_1 + ...$ Each partial product is $a × digit$ with carries shown in orange on top (exactly like your Ex1 and Ex2).")
+        elif op == "Division (÷) - Like Image Division":
+            st.markdown("### ➗ Division - Keyhole Long Division (like your image)")
+            st.markdown(render_division_html(a_in, b_in), unsafe_allow_html=True)
+            st.markdown("---")
+            st.markdown("**Algebraic Theory:** Division is inverse of multiplication. We find $q$ such that $dividend = divisor×q + remainder$, $0 ≤ remainder < divisor$. Steps: divide partial dividend, multiply back (orange -6, -15), subtract, bring down next digit (orange 15, 06).")
+
+    st.info("💡 Tip: The orange numbers are the carries (multiplication/addition), borrows (subtraction), and intermediate subtractions (division) - exactly as handwritten in school, matching your screenshot style.")
+
+# ================= 1 - FIRST DEGREE =================
+if mode == "First-Degree Equation":
     st.title("1️⃣ First-Degree Equation Solver")
-    theory_box("Linear Equation", r"""$a x + b = 0$, $x = -b/a$""")
-    eq_input = st.text_input("Equation", value="2*x + 3 = 11")
-    if st.button("Solve First-Degree", type="primary"):
-        if "=" in eq_input:
-            left_str, right_str = eq_input.split("=",1)
+    theory_box("Linear Equation (First Degree)",
+    r"""
+**Definition:** A first-degree equation in one variable is an equation that can be written in the form:
+$$ a x + b = 0 \quad \text{or} \quad a x + b = c $$
+where $a \neq 0$ and $a, b, c \in \mathbb{R}$.
+
+**Fundamental Concept:** The degree is 1 because the highest exponent of the variable is 1. Geometrically, $y = a x + b$ is a straight line, and the solution is where this line crosses the x-axis (or where two lines intersect).
+
+**Properties Used to Solve:**
+1.  **Addition/Subtraction Property of Equality:** If $A = B$, then $A \pm k = B \pm k$
+2.  **Multiplication/Division Property of Equality:** If $A = B$, then $k \cdot A = k \cdot B$ for $k \neq 0$
+3.  **Goal:** Isolate the variable $x$ on one side: $x = \text{value}$.
+
+**General Solution Formula:** For $a x + b = 0$ → $x = -b / a$.
+    """)
+
+    st.subheader("Enter your equation")
+    col1, col2 = st.columns([2,1])
+    with col1:
+        eq_input = st.text_input("Equation (e.g., 2*x + 3 = 7, or 4x - 5 = 0)", value="2*x + 3 = 11")
+    with col2:
+        solve_mode = st.selectbox("Input mode", ["Full Equation String", "Coefficients a*x + b = c"])
+
+    a_val = b_val = c_val = None
+
+    if solve_mode == "Coefficients a*x + b = c":
+        c1, c2, c3 = st.columns(3)
+        a_val = c1.number_input("a (coefficient of x)", value=2.0)
+        b_val = c2.number_input("b (constant left)", value=3.0)
+        c_val = c3.number_input("c (right side)", value=11.0)
+        eq_input = f"{a_val}*x + {b_val} = {c_val}"
+
+    if st.button("Solve First-Degree Equation", type="primary"):
+        if "=" not in eq_input:
+            st.error("Please include '=' in your equation.")
+        else:
+            left_str, right_str = eq_input.split("=", 1)
             left_expr = safe_parse(left_str)
             right_expr = safe_parse(right_str)
-            eq_sym = Eq(left_expr, right_expr)
-            sol = solve(eq_sym, x)
-            st.latex(f"x = {sp.latex(sol[0])}" if sol else "No solution")
+            if left_expr is None or right_expr is None:
+                st.error(f"Could not parse equation. Check syntax.")
+            else:
+                st.markdown("### 🔍 Detailed Step-by-Step Solution")
+                
+                eq_sym = Eq(left_expr, right_expr)
+                st.latex(sp.latex(eq_sym))
+                
+                # Step 1: Identify
+                step_header(1, "Identify and Understand the Equation", 
+                            f"We have: ${sp.latex(left_expr)} = {sp.latex(right_expr)}$\n\nThis is a first-degree equation because the variable $x$ appears with exponent 1 only.")
+                
+                # Step 2: Bring all to one side / Standard form
+                expr_combined = left_expr - right_expr
+                expr_expanded = sp.expand(expr_combined)
+                st.markdown(f"We want to bring all terms to the left side to get standard form $a x + b = 0$.")
+                st.latex(f"{sp.latex(left_expr)} - ({sp.latex(right_expr)}) = 0")
+                st.latex(f"{sp.latex(expr_expanded)} = 0")
+                
+                poly = Poly(expr_expanded, x)
+                if poly.degree() != 1:
+                    st.warning(f"After simplification, this is degree {poly.degree()}, not 1. But we will continue.")
+                    coeffs = poly.all_coeffs()
+                else:
+                    coeffs = poly.all_coeffs() # [a, b]
+                    a_std = coeffs[0]
+                    b_std = coeffs[1] if len(coeffs) > 1 else 0
+                    
+                    step_header(2, "Extract Coefficients in Standard Form",
+                                f"Standard form is $a x + b = 0$. By comparing:")
+                    st.latex(f"a = {sp.latex(a_std)}, \\quad b = {sp.latex(b_std)}")
+                    st.markdown(f"So our equation is: ${sp.latex(a_std)} x + ({sp.latex(b_std)}) = 0$")
 
-# ================= SECOND DEGREE =================
+                # Step 3: Isolate
+                step_header(3, "Isolate the Variable Term using Subtraction Property",
+                            "We subtract $b$ from both sides to move the constant term to the right.")
+                if poly.degree() == 1:
+                    st.latex(f"{sp.latex(a_std)} x + {sp.latex(b_std)} - ({sp.latex(b_std)}) = 0 - ({sp.latex(b_std)})")
+                    st.latex(f"{sp.latex(a_std)} x = {-b_std}")
+
+                # Step 4: Division
+                step_header(4, "Isolate x using Division Property",
+                            "Now divide both sides by coefficient $a$ (which must be non-zero).")
+                solution = solve(eq_sym, x)
+                if solution:
+                    sol = solution[0]
+                    if poly.degree() == 1:
+                        st.latex(f"x = \\frac{{ {-b_std} }}{{ {sp.latex(a_std)} }}")
+                        st.latex(f"x = {sp.latex(sol)}")
+                        try:
+                            st.latex(f"x \\approx {float(sol):.6f}")
+                        except:
+                            pass
+                    else:
+                        st.latex(f"x = {sp.latex(sol)}")
+
+                # Step 5: Verification
+                step_header(5, "Verification (Proof that solution is correct)",
+                            "Substitute the found value back into the original equation.")
+                if solution:
+                    sol = solution[0]
+                    lhs_check = left_expr.subs(x, sol)
+                    rhs_check = right_expr.subs(x, sol)
+                    st.latex(f"\\text{{Left}} = {sp.latex(left_expr)} = {sp.latex(left_expr.subs(x, sol))} = {sp.latex(sp.simplify(lhs_check))}")
+                    st.latex(f"\\text{{Right}} = {sp.latex(right_expr)} = {sp.latex(sp.simplify(rhs_check))}")
+                    if sp.simplify(lhs_check - rhs_check) == 0:
+                        st.success(f"✅ Verified! LHS = RHS = {sp.latex(sp.simplify(lhs_check))}. The solution is correct.")
+                    else:
+                        st.error("Verification failed.")
+
+                st.info("**Conceptual Summary:** We used inverse operations. Addition is undone by subtraction, multiplication by division. This preserves equality and leads to $x = \\text{number}$.")
+
+# ================= 2 - SECOND DEGREE =================
 elif mode == "Second-Degree Equation":
-    st.title("2️⃣ Quadratic Solver")
-    theory_box("Quadratic", r"""$a x^2 + b x + c =0$, $x = \frac{-b\pm\sqrt{b^2-4ac}}{2a}$""")
-    a_q = st.number_input("a", value=1.0)
-    b_q = st.number_input("b", value=-3.0)
-    c_q = st.number_input("c", value=2.0)
+    st.title("2️⃣ Second-Degree (Quadratic) Equation Solver")
+    theory_box("Quadratic Equation",
+    r"""
+**Definition:** A quadratic equation is a second-degree polynomial equation in one variable:
+$$ a x^2 + b x + c = 0, \quad a \neq 0 $$
+
+**Key Concepts:**
+- **Degree 2:** Highest exponent is 2 → Graph is a parabola.
+- **Number of Solutions:** Up to 2 real solutions (roots).
+- **Discriminant:** $\Delta = b^2 - 4ac$ determines the nature of roots:
+  - $\Delta > 0$: Two distinct real roots (parabola crosses x-axis twice)
+  - $\Delta = 0$: One real double root (parabola touches x-axis)
+  - $\Delta < 0$: No real roots, two complex conjugate roots (parabola does not cross)
+
+**Solution Methods:**
+1. **Factoring:** If possible, write as $(x - r_1)(x - r_2)=0$
+2. **Completing the Square:** Transform to $(x + \frac{b}{2a})^2 = \frac{-c}{a} + \frac{b^2}{4a^2}$
+3. **Quadratic Formula (Bhaskara):** The universal formula:
+$$ x = \frac{-b \pm \sqrt{\Delta}}{2a} = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a} $$
+
+**Vieta's Formulas:** For roots $r_1, r_2$: $r_1 + r_2 = -b/a$, $r_1 \cdot r_2 = c/a$.
+    """)
+    st.subheader("Enter quadratic: a*x^2 + b*x + c = 0")
+    col_a, col_b, col_c = st.columns(3)
+    a_q = col_a.number_input("a", value=1.0, format="%.5f")
+    b_q = col_b.number_input("b", value=-3.0, format="%.5f")
+    c_q = col_c.number_input("c", value=2.0, format="%.5f")
+    
+    alt_input = st.text_input("Or type full equation (e.g., x^2 - 3*x + 2 = 0)", value="x^2 - 3*x + 2 = 0")
+    use_alt = st.checkbox("Use text equation instead of coefficients above")
+
     if st.button("Solve Quadratic", type="primary"):
-        a_sym, b_sym, c_sym = sp.nsimplify(a_q), sp.nsimplify(b_q), sp.nsimplify(c_q)
-        expr = a_sym*x**2 + b_sym*x + c_sym
+        if use_alt:
+            if "=" not in alt_input:
+                st.error("Include '='")
+                st.stop()
+            l, r = alt_input.split("=",1)
+            lex = safe_parse(l)
+            rex = safe_parse(r)
+            expr = sp.expand(lex - rex)
+            poly = Poly(expr, x)
+            coeffs = poly.all_coeffs()
+            # pad to degree 2
+            while len(coeffs) < 3:
+                coeffs = [0] + coeffs
+            a_q, b_q, c_q = float(coeffs[0]), float(coeffs[1]), float(coeffs[2]) if len(coeffs)>2 else 0
+            a_sym, b_sym, c_sym = coeffs[0], coeffs[1], coeffs[2] if len(coeffs)>2 else 0
+        else:
+            a_sym, b_sym, c_sym = sp.nsimplify(a_q), sp.nsimplify(b_q), sp.nsimplify(c_q)
+            expr = a_sym*x**2 + b_sym*x + c_sym
+
+        st.markdown("### 🔍 Detailed Step-by-Step Solution")
+        st.latex(f"{sp.latex(a_sym)} x^2 + {sp.latex(b_sym)} x + {sp.latex(c_sym)} = 0")
+
+        if a_sym == 0:
+            st.error("Coefficient 'a' cannot be zero for a quadratic equation. It would be linear.")
+            st.stop()
+
+        step_header(1, "Identify Coefficients and Standard Form",
+                    "We compare to $a x^2 + b x + c = 0$")
+        st.latex(f"a = {sp.latex(a_sym)}, \\; b = {sp.latex(b_sym)}, \\; c = {sp.latex(c_sym)}")
+
+        step_header(2, "Compute the Discriminant", 
+                    "Discriminant $\\Delta = b^2 - 4ac$ tells us the nature of roots. Derived from completing the square.")
         delta = b_sym**2 - 4*a_sym*c_sym
+        delta_simplified = sp.expand(delta)
+        st.latex(f"\\Delta = b^2 - 4ac = ({sp.latex(b_sym)})^2 - 4({sp.latex(a_sym)})({sp.latex(c_sym)})")
+        st.latex(f"\\Delta = {sp.latex(b_sym**2)} - {sp.latex(4*a_sym*c_sym)} = {sp.latex(delta_simplified)}")
+        try:
+            st.write(f"Numerical value: Δ ≈ {float(delta_simplified):.6f}")
+        except:
+            pass
+
+        if delta_simplified.is_number:
+            if delta_simplified > 0:
+                st.success("Δ > 0 → Two distinct real roots. Parabola intersects x-axis at two points.")
+            elif delta_simplified == 0:
+                st.warning("Δ = 0 → One real double root (repeated). Parabola touches x-axis at vertex.")
+            else:
+                st.info("Δ < 0 → No real roots, two complex conjugate roots. Parabola does not cross x-axis.")
+
+        step_header(3, "Apply Quadratic Formula (Bhaskara)",
+                    "Formula comes from completing the square for general quadratic:")
+        st.latex(r"x = \frac{-b \pm \sqrt{\Delta}}{2a}")
         latex_b = sp.latex(b_sym)
-        latex_delta = sp.latex(delta)
+        latex_delta = sp.latex(delta_simplified)
         latex_a = sp.latex(a_sym)
         latex_2a = sp.latex(2*a_sym)
         latex_minus_b = sp.latex(-b_sym)
         st.latex("x = \\frac{ -(" + latex_b + ") \\pm \\sqrt{" + latex_delta + "}}{2 \\cdot " + latex_a + "}")
         st.latex("x = \\frac{" + latex_minus_b + " \\pm \\sqrt{" + latex_delta + "}}{" + latex_2a + "}")
+
+        step_header(4, "Compute the Two Roots Separately",
+                    "We evaluate both plus and minus branches.")
         roots = solve(Eq(expr,0), x)
-        for i,r in enumerate(roots):
-            st.latex(f"x_{i+1} = {sp.latex(r)}")
+        for i, r in enumerate(roots):
+            st.latex(f"x_{i+1} = {sp.latex(r)} \\approx {complex(r.evalf()):.6f}" if r.is_number else f"x_{i+1} = {sp.latex(r)}")
+        
+        # If complex, show real/imag
+        if len(roots) == 2:
+            step_header(5, "Detailed Calculation for Each Root")
+            sqrt_delta = sp.sqrt(delta_simplified)
+            x1_form = (-b_sym + sqrt_delta) / (2*a_sym)
+            x2_form = (-b_sym - sqrt_delta) / (2*a_sym)
+            st.latex("x_1 = \\frac{" + latex_minus_b + " + \\sqrt{" + latex_delta + "}}{" + latex_2a + "} = " + sp.latex(sp.simplify(x1_form)))
+            st.latex("x_2 = \\frac{" + latex_minus_b + " - \\sqrt{" + latex_delta + "}}{" + latex_2a + "} = " + sp.latex(sp.simplify(x2_form)))
 
-# ================= LINEAR SYSTEMS =================
+        step_header(6, "Factorization and Vieta Verification",
+                    "If $r_1, r_2$ are roots, then $a x^2 + b x + c = a(x - r_1)(x - r_2)$")
+        if len(roots) >=1:
+            try:
+                factored = sp.factor(expr)
+                st.latex(f"\\text{{Factored form: }} {sp.latex(expr)} = {sp.latex(factored)}")
+            except:
+                pass
+            if len(roots)==2:
+                sum_roots = sp.simplify(roots[0] + roots[1])
+                prod_roots = sp.simplify(roots[0]*roots[1])
+                st.latex(f"r_1 + r_2 = {sp.latex(sum_roots)} \\; \\text{{ should be }} -b/a = {sp.latex(sp.simplify(-b_sym/a_sym))}")
+                st.latex(f"r_1 \\cdot r_2 = {sp.latex(prod_roots)} \\; \\text{{ should be }} c/a = {sp.latex(sp.simplify(c_sym/a_sym))}")
+                if sp.simplify(sum_roots + b_sym/a_sym) == 0 and sp.simplify(prod_roots - c_sym/a_sym) == 0:
+                    st.success("✅ Vieta's formulas verified!")
+
+        # Vertex
+        step_header(7, "Extra: Vertex and Graph Information",
+                    "The vertex is the maximum/minimum point of the parabola.")
+        xv = -b_sym/(2*a_sym)
+        yv = expr.subs(x, xv)
+        st.latex(f"x_v = -b/(2a) = {sp.latex(sp.simplify(xv))}, \\quad y_v = f(x_v) = {sp.latex(sp.simplify(yv))}")
+        if a_sym > 0:
+            st.markdown("Since $a > 0$, parabola opens **upwards** → vertex is minimum.")
+        else:
+            st.markdown("Since $a < 0$, parabola opens **downwards** → vertex is maximum.")
+
+# ================= 3 - LINEAR SYSTEMS =================
 elif mode == "Linear Systems":
-    st.title("📐 Linear Systems")
-    theory_box("Linear Systems", r"""Gaussian Elimination""")
-    size = st.selectbox("Size", ["2x2", "3x3"])
-    n=2 if "2x2" in size else 3
-    var_names=['x','y','z'][:n]
-    A=[]; b_vec=[]
+    st.title("📐 Linear Systems Solver")
+    theory_box("Systems of Linear Equations",
+    r"""
+**Definition:** A system of linear equations is a collection of linear equations with the same variables.
+For example, a $2 \times 2$ system:
+$$
+\begin{cases}
+a_{11} x + a_{12} y = b_1 \\
+a_{21} x + a_{22} y = b_2
+\end{cases}
+$$
+
+**Possible Solutions:**
+1.  **Unique solution:** Lines intersect at one point (determinant $\neq 0$)
+2.  **No solution:** Lines are parallel (inconsistent)
+3.  **Infinitely many solutions:** Lines are the same (dependent)
+
+**Solution Methods:**
+- **Substitution:** Solve one equation for one variable and substitute into the other.
+- **Elimination (Gaussian Elimination):** Add multiples of equations to eliminate variables. This is systematic and works for any size.
+- **Cramer's Rule (for $2\times2$):** $x = \frac{\det(A_x)}{\det(A)}$, $y = \frac{\det(A_y)}{\det(A)}$
+- **Matrix Inverse:** $A \mathbf{x} = \mathbf{b} \implies \mathbf{x} = A^{-1} \mathbf{b}$
+
+**This solver uses Gaussian Elimination with detailed row operations**, because it is the most instructive and general method. Each operation corresponds to an elementary row operation that preserves the solution set:
+- Swap rows
+- Multiply a row by non-zero constant
+- Add multiple of one row to another.
+    """)
+
+    size = st.selectbox("System size", ["2x2 (2 equations, 2 variables)", "3x3 (3 equations, 3 variables)"], index=0)
+    n = 2 if "2x2" in size else 3
+    vars_sym = [x, y, z][:n]
+    var_names = ['x', 'y', 'z'][:n]
+
+    st.subheader(f"Enter coefficients for {n}x{n} system: A * [vars] = b")
+    st.markdown("Form: $a_{11}x + a_{12}y (+ a_{13}z) = b_1$ etc.")
+
+    A = []
+    b_vec = []
+    cols = st.columns(n+1)
     for i in range(n):
-        st.markdown(f"Equation {i+1}")
-        c=st.columns(n+1)
-        row=[]
+        row = []
+        st.markdown(f"**Equation {i+1}:**")
+        c = st.columns(n+1)
         for j in range(n):
-            row.append(c[j].number_input(f"a[{i+1},{j+1}]", value=float(1 if i==j else 0), key=f"a_{i}_{j}"))
-        b_vec.append(c[n].number_input(f"b[{i+1}]", value=float(i+1), key=f"b_{i}"))
+            val = c[j].number_input(f"a[{i+1},{j+1}] ({var_names[j]})", value=float(1 if i==j else (1 if j==0 else 0)), key=f"a_{i}_{j}", format="%.4f")
+            row.append(val)
+        b_val = c[n].number_input(f"b[{i+1}]", value=float(i+1), key=f"b_{i}", format="%.4f")
         A.append(row)
-    if st.button("Solve System", type="primary"):
-        A_np=np.array(A,float); b_np=np.array(b_vec,float)
-        x_sol=np.linalg.solve(A_np,b_np)
-        for i,name in enumerate(var_names):
-            st.latex(f"{name} = {x_sol[i]}")
+        b_vec.append(b_val)
 
-# ================= DERIVATIVE =================
+    if st.button("Solve Linear System", type="primary"):
+        A_np = np.array(A, dtype=float)
+        b_np = np.array(b_vec, dtype=float)
+        st.markdown("### 🔍 Detailed Solution via Gaussian Elimination")
+
+        # Augmented matrix
+        Aug = np.hstack([A_np, b_np.reshape(-1,1)])
+        st.markdown("**Initial Augmented Matrix [A|b]:**")
+        st.latex(sp.latex(sp.Matrix(Aug)))
+
+        step_header(1, "Check Determinant (Existence of Unique Solution)",
+                    "Compute det(A) to predict solution type.")
+        det = np.linalg.det(A_np)
+        st.latex(f"\\det(A) = {det:.6f}")
+        if abs(det) < 1e-9:
+            st.warning("Determinant ≈ 0 → Matrix is singular. System may have no solution or infinite solutions. Proceeding with elimination to classify.")
+        else:
+            st.success(f"Determinant ≠ 0 ({det:.4f}) → Unique solution exists.")
+
+        # Gaussian elimination with steps
+        st.markdown("#### Gaussian Elimination Steps:")
+        M = Aug.copy()
+        steps_log = []
+        for col in range(n):
+            # Partial pivoting
+            pivot_row = col + np.argmax(np.abs(M[col:, col]))
+            if abs(M[pivot_row, col]) < 1e-12:
+                st.write(f"Column {col+1}: No pivot found, column is zero below.")
+                continue
+            if pivot_row != col:
+                st.markdown(f"**Swap R{col+1} ↔ R{pivot_row+1}** to get larger pivot")
+                M[[col, pivot_row]] = M[[pivot_row, col]]
+                st.latex(sp.latex(sp.Matrix(np.round(M,4))))
+            
+            pivot = M[col, col]
+            st.markdown(f"**Pivot at R{col+1}, C{col+1} = {pivot:.4f}**")
+            
+            # Normalize pivot row (optional, we will show)
+            # Eliminate below
+            for r in range(col+1, n):
+                factor = M[r, col] / pivot
+                if abs(factor) > 1e-12:
+                    st.markdown(f"**Eliminate x_{col+1} from R{r+1}:** $R_{r+1} \\leftarrow R_{r+1} - ({factor:.4f}) \\cdot R_{col+1}$")
+                    M[r, :] = M[r, :] - factor * M[col, :]
+                    st.latex(sp.latex(sp.Matrix(np.round(M,4))))
+
+        # Back substitution
+        st.markdown("#### Back Substitution (from bottom to top):")
+        x_sol = np.zeros(n)
+        for i in reversed(range(n)):
+            if abs(M[i,i]) < 1e-12:
+                if abs(M[i,-1]) < 1e-12:
+                    st.markdown(f"Row {i+1}: $0 = 0$ → infinite solutions along this dimension")
+                else:
+                    st.error(f"Row {i+1}: $0 = {M[i,-1]:.4f}$ → No solution! Inconsistent system.")
+                    st.stop()
+                continue
+            sum_ax = np.dot(M[i, i+1:n], x_sol[i+1:n])
+            x_sol[i] = (M[i, -1] - sum_ax) / M[i,i]
+            st.latex(f"{var_names[i]} = \\frac{{ {M[i,-1]:.4f} - {sum_ax:.4f} }}{{ {M[i,i]:.4f} }} = {x_sol[i]:.6f}")
+
+        st.success("### ✅ Final Solution:")
+        for i, name in enumerate(var_names):
+            st.latex(f"{name} = {x_sol[i]:.8f}")
+
+        # Verification
+        st.markdown("#### Verification: Substitute into original equations")
+        for i in range(n):
+            lhs = np.dot(A_np[i], x_sol)
+            st.latex(f"Eq {i+1}: {lhs:.6f} \\approx {b_np[i]:.6f} \\; { '✅' if abs(lhs-b_np[i])<1e-6 else '❌'}")
+
+        # Cramer's for 2x2
+        if n==2:
+            step_header(2, "Alternative Check: Cramer's Rule for 2x2",
+                        "For completeness, we also show Cramer's Rule.")
+            A_mat = sp.Matrix(A_np)
+            detA = A_mat.det()
+            Ax = A_mat.copy()
+            Ax[:,0] = sp.Matrix(b_np)
+            Ay = A_mat.copy()
+            Ay[:,1] = sp.Matrix(b_np)
+            st.latex(f"\\det(A) = {sp.latex(detA)}")
+            st.latex(f"\\det(A_x) = {sp.latex(Ax.det())}, \\; x = \\frac{{\\det(A_x)}}{{\\det(A)}} = {sp.latex(Ax.det()/detA)}")
+            st.latex(f"\\det(A_y) = {sp.latex(Ay.det())}, \\; y = \\frac{{\\det(A_y)}}{{\\det(A)}} = {sp.latex(Ay.det()/detA)}")
+
+# ================= 4 - DERIVATIVE =================
 elif mode == "Derivative":
-    st.title("📈 Derivative")
-    theory_box("Derivative", r"""$f'(x)=\lim_{h\to0}\frac{f(x+h)-f(x)}{h}$""")
-    f_input=st.text_input("f(x)", value="x^3 + 2*x^2")
-    if st.button("Derive", type="primary"):
-        f_expr=safe_parse(f_input)
-        st.latex(f"f' = {sp.latex(sp.diff(f_expr,x))}")
+    st.title("📈 Derivative Solver")
+    theory_box("Derivatives",
+    r"""
+**Definition (Limit):** The derivative of $f$ at $x$ is:
+$$ f'(x) = \lim_{h \to 0} \frac{f(x+h) - f(x)}{h} $$
+if the limit exists.
 
-# ================= INTEGRAL =================
+**Geometric Interpretation:** $f'(x_0)$ is the slope of the tangent line to the curve $y = f(x)$ at $x_0$.
+**Physical Interpretation:** Instantaneous rate of change (velocity if $f$ is position).
+
+**Core Differentiation Rules:**
+1.  **Power Rule:** $\frac{d}{dx}[x^n] = n x^{n-1}$
+2.  **Constant Multiple:** $\frac{d}{dx}[c f] = c f'$
+3.  **Sum/Difference:** $(f \pm g)' = f' \pm g'$
+4.  **Product Rule:** $(f g)' = f' g + f g'$
+5.  **Quotient Rule:** $\left(\frac{f}{g}\right)' = \frac{f' g - f g'}{g^2}$
+6.  **Chain Rule:** $(f(g(x)))' = f'(g(x)) \cdot g'(x)$ - for composite functions.
+7.  **Special Functions:** $\frac{d}{dx} \sin x = \cos x$, $\frac{d}{dx} e^x = e^x$, $\frac{d}{dx} \ln x = 1/x$
+
+**This solver identifies which rules apply and shows the breakdown.**
+    """)
+
+    st.subheader("Enter function f(x)")
+    f_input = st.text_input("f(x) =", value="x^3 + 2*x^2 - 5*x + sin(x)")
+    var_choice = st.selectbox("Variable to differentiate w.r.t.", ["x", "t"], index=0)
+    var = x if var_choice=="x" else t
+    order = st.slider("Order of derivative", 1, 3, 1)
+
+    if st.button("Compute Derivative", type="primary"):
+        f_expr = safe_parse(f_input, var=var)
+        if f_expr is None:
+            st.error("Could not parse function. Check syntax.")
+            st.stop()
+        
+        st.markdown("### 🔍 Detailed Step-by-Step Differentiation")
+        st.latex(f"f({var_choice}) = {sp.latex(f_expr)}")
+
+        step_header(1, "Identify Structure of Function",
+                    "We analyze whether it's a sum, product, quotient, composition, etc.")
+        # Breakdown if Add
+        if f_expr.is_Add:
+            st.markdown(f"The function is a **sum/difference of {len(f_expr.args)} terms**. By the Sum Rule, derivative of sum = sum of derivatives.")
+            for i, term in enumerate(f_expr.args):
+                st.latex(f"\\text{{Term {i+1}}}: {sp.latex(term)}")
+        elif f_expr.is_Mul:
+            st.markdown("The function is a **product** of factors → Product Rule will be needed.")
+            st.latex(f"f = {sp.latex(f_expr.args[0])} \\cdot {sp.latex(f_expr.args[1])}" if len(f_expr.args)==2 else sp.latex(f_expr))
+        elif f_expr.is_Pow:
+            st.markdown("The function is a **power** → Power Rule + Chain Rule if base is not just x.")
+        else:
+            st.markdown(f"Function type: `{type(f_expr).__name__}`. We will apply appropriate rules.")
+
+        step_header(2, f"Apply Differentiation Rules (Order {order})",
+                    "We differentiate term by term.")
+        
+        # Show manual steps for each term if Add
+        if f_expr.is_Add:
+            deriv_terms = []
+            for term in f_expr.args:
+                d_term = sp.diff(term, var)
+                st.markdown(f"**Derivative of term** ${sp.latex(term)}$:")
+                # Explain power rule if applicable
+                if term.is_Pow or (term.is_Mul and any(a.is_Pow for a in term.args)):
+                    st.markdown(f"- Apply Power Rule / Constant Multiple: $\\frac{{d}}{{d{var_choice}}} {sp.latex(term)} = {sp.latex(d_term)}$")
+                else:
+                    # try to detect sin etc
+                    st.latex(f"\\frac{{d}}{{d{var_choice}}} \\left[ {sp.latex(term)} \\right] = {sp.latex(d_term)}")
+                deriv_terms.append(d_term)
+            st.markdown("Now sum all derivatives:")
+            st.latex(f"f' = {' + '.join([sp.latex(d) for d in deriv_terms])}")
+        else:
+            # For product/chain, show chain breakdown
+            if f_expr.has(sp.sin) or f_expr.has(sp.cos) or f_expr.has(sp.exp) or f_expr.has(sp.log):
+                st.markdown("This contains **transcendental composition** → Chain Rule is used.")
+                st.markdown("Chain Rule: $(f(g(x)))' = f'(g(x)) \\cdot g'(x)$")
+        
+        # Final derivative
+        f_prime = sp.diff(f_expr, var, order)
+        f_prime_simplified = sp.simplify(f_prime)
+        st.markdown(f"#### Result after differentiation (order {order}):")
+        st.latex(f"\\frac{{d^{order}}}{{d{var_choice}^{order}}} f = {sp.latex(f_prime)}")
+        st.latex(f"\\text{{Simplified: }} {sp.latex(f_prime_simplified)}")
+
+        step_header(3, "Simplification and Interpretation",
+                    "Simplify and discuss meaning.")
+        st.latex(f"f^{{{order}}}({var_choice}) = {sp.latex(sp.factor(f_prime_simplified))}")
+        
+        # Show evaluation at point
+        st.markdown("**Evaluate derivative at a point (optional check):**")
+        pt = st.number_input(f"Evaluate at {var_choice} =", value=1.0)
+        val_at = f_prime_simplified.subs(var, pt)
+        st.latex(f"f^{{{order}}}({pt}) = {sp.latex(val_at)} \\approx {float(val_at.evalf()):.6f}" if val_at.is_number else f"f^{{{order}}}({pt}) = {sp.latex(val_at)}")
+        st.info(f"Geometrically, this is the slope of the {'tangent line' if order==1 else 'rate of change of slope'} at {var_choice}={pt}.")
+
+# ================= 5 - INTEGRAL =================
 elif mode == "Integral":
-    st.title("∫ Integral")
-    theory_box("Integral", r"""$\int f(x)dx = F(x)+C$""")
-    f_input=st.text_input("f(x)", value="x^2 + 3*x")
-    if st.button("Integrate", type="primary"):
-        f_expr=safe_parse(f_input)
-        st.latex(f"\\int f = {sp.latex(sp.integrate(f_expr,x))} + C")
+    st.title("∫ Integral Solver")
+    theory_box("Integrals",
+    r"""
+**Definition:**
+- **Indefinite Integral (Antiderivative):** $\int f(x) dx = F(x) + C$ where $F'(x) = f(x)$. Represents a family of functions.
+- **Definite Integral:** $\int_a^b f(x) dx$ is the limit of Riemann sums, equal to the net signed area under $y=f(x)$ from $a$ to $b$.
+
+**Fundamental Theorem of Calculus (FTC):**
+1.  If $F(x) = \int_a^x f(t) dt$, then $F'(x) = f(x)$
+2.  $\int_a^b f(x) dx = F(b) - F(a)$ where $F$ is any antiderivative of $f$.
+
+**Core Integration Rules:**
+1.  **Power Rule:** $\int x^n dx = \frac{x^{n+1}}{n+1} + C$, $n \neq -1$
+2.  **Exponential:** $\int e^x dx = e^x + C$
+3.  **Trigonometric:** $\int \sin x dx = -\cos x + C$, $\int \cos x dx = \sin x + C$
+4.  **Constant Multiple & Sum:** $\int (c f + g) = c\int f + \int g$
+5.  **Substitution (u-sub):** $\int f(g(x)) g'(x) dx = \int f(u) du$, $u=g(x)$ - reverse chain rule.
+6.  **Integration by Parts:** $\int u dv = u v - \int v du$ - reverse product rule.
+
+**This solver identifies the pattern and shows step-by-step application.**
+    """)
+
+    st.subheader("Enter function to integrate")
+    f_int_input = st.text_input("f(x) =", value="x^2 + 3*x + 2")
+    int_type = st.radio("Type", ["Indefinite Integral (antiderivative)", "Definite Integral"], horizontal=True)
+    var_int_choice = st.selectbox("Variable", ["x", "t"], index=0, key="var_int")
+    var_int = x if var_int_choice=="x" else t
+
+    a_lim = b_lim = None
+    if int_type == "Definite Integral":
+        c1, c2 = st.columns(2)
+        a_lim = c1.number_input("Lower limit a", value=0.0)
+        b_lim = c2.number_input("Upper limit b", value=1.0)
+
+    if st.button("Compute Integral", type="primary"):
+        f_expr = safe_parse(f_int_input, var=var_int)
+        if f_expr is None:
+            st.error("Could not parse function.")
+            st.stop()
+
+        st.markdown("### 🔍 Detailed Step-by-Step Integration")
+        st.latex(f"f({var_int_choice}) = {sp.latex(f_expr)}")
+
+        step_header(1, "Analyze Integrand Structure",
+                    "Check if integrand is sum, power, product (needs by parts), composite (needs u-sub), etc.")
+        if f_expr.is_Add:
+            st.markdown(f"Integrand is **sum of {len(f_expr.args)} terms** → Use Sum Rule: integral of sum = sum of integrals.")
+            for term in f_expr.args:
+                st.latex(f"\\int {sp.latex(term)} d{var_int_choice}")
+        elif f_expr.is_Mul and len(f_expr.args) == 2:
+            st.markdown("Integrand is **product** → May need Integration by Parts: $\\int u dv = uv - \\int v du$")
+            st.latex(f"\\text{{Try: }} u = {sp.latex(f_expr.args[0])}, dv = {sp.latex(f_expr.args[1])} d{var_int_choice}")
+        elif f_expr.is_Pow or f_expr.is_Symbol:
+            st.markdown("Power function detected → Direct Power Rule applicable: $\\int x^n = x^{n+1}/(n+1)$")
+
+        # Manual integrate for steps if possible
+        try:
+            from sympy.integrals.manualintegrate import manualintegrate, integral_steps
+            steps = integral_steps(f_expr, var_int)
+            st.markdown("**SymPy Manual Integration Steps (rule breakdown):**")
+            st.code(str(steps)[:2000])
+        except Exception as e:
+            steps = None
+
+        step_header(2, "Apply Integration Rules Term by Term",
+                    "We integrate each piece using appropriate rule.")
+        
+        if f_expr.is_Add:
+            integrated_terms = []
+            for term in f_expr.args:
+                int_term = sp.integrate(term, var_int)
+                # Explain rule
+                if term.is_Pow or term.is_Symbol or term.is_Number:
+                    # power rule
+                    if term == var_int:
+                        st.latex(f"\\int {sp.latex(term)} d{var_int_choice} = \\int {var_int_choice}^1 d{var_int_choice} = \\frac{{{var_int_choice}^2}}{{2}} = {sp.latex(int_term)}")
+                    elif term.is_Pow:
+                        base, exp = term.as_base_exp()
+                        if base == var_int:
+                            st.latex(f"\\int {var_int_choice}^{{{sp.latex(exp)}}} d{var_int_choice} = \\frac{{{var_int_choice}^{{{sp.latex(exp+1)}}}}}{{{sp.latex(exp+1)}}} = {sp.latex(int_term)} \\quad \\text{{(Power Rule)}}")
+                        else:
+                            st.latex(f"\\int {sp.latex(term)} d{var_int_choice} = {sp.latex(int_term)}")
+                    else:
+                        st.latex(f"\\int {sp.latex(term)} d{var_int_choice} = {sp.latex(int_term)}")
+                elif term.is_Mul:
+                    # constant multiple
+                    coeff = term.as_coeff_Mul()[0]
+                    rest = term.as_coeff_Mul()[1]
+                    st.latex(f"\\int {sp.latex(term)} d{var_int_choice} = {sp.latex(coeff)} \\int {sp.latex(rest)} d{var_int_choice} = {sp.latex(int_term)} \\quad \\text{{(Constant Multiple Rule)}}")
+                else:
+                    st.latex(f"\\int {sp.latex(term)} d{var_int_choice} = {sp.latex(int_term)}")
+                integrated_terms.append(int_term)
+            antideriv = sum(integrated_terms)
+        else:
+            antideriv = sp.integrate(f_expr, var_int)
+            st.latex(f"\\int {sp.latex(f_expr)} d{var_int_choice} = {sp.latex(antideriv)} + C")
+
+        step_header(3, "General Antiderivative (Indefinite Integral)",
+                    "Add constant of integration $C$ because derivative of constant is zero.")
+        antideriv_simplified = sp.simplify(antideriv)
+        st.latex(f"\\int {sp.latex(f_expr)} d{var_int_choice} = {sp.latex(antideriv_simplified)} + C")
+        st.markdown(f"**Verification by differentiation:** $\\frac{{d}}{{d{var_int_choice}}} [{sp.latex(antideriv_simplified)}] = {sp.latex(sp.diff(antideriv_simplified, var_int))}$ → Should equal original integrand.")
+        if sp.simplify(sp.diff(antideriv_simplified, var_int) - f_expr) == 0:
+            st.success("✅ Differentiation check passed: derivative of antiderivative equals original integrand.")
+
+        if int_type == "Definite Integral" and a_lim is not None:
+            step_header(4, "Apply Fundamental Theorem for Definite Integral",
+                        f"FTC Part 2: $\\int_{{{a_lim}}}^{{{b_lim}}} f(x) dx = F({b_lim}) - F({a_lim})$ where $F$ is antiderivative.")
+            Fa = antideriv_simplified.subs(var_int, a_lim)
+            Fb = antideriv_simplified.subs(var_int, b_lim)
+            definite_val = sp.integrate(f_expr, (var_int, a_lim, b_lim))
+            st.latex(f"F({var_int_choice}) = {sp.latex(antideriv_simplified)}")
+            st.latex(f"F({b_lim}) = {sp.latex(Fb)} \\approx {float(Fb.evalf()):.6f}")
+            st.latex(f"F({a_lim}) = {sp.latex(Fa)} \\approx {float(Fa.evalf()):.6f}")
+            st.latex(f"\\int_{{{a_lim}}}^{{{b_lim}}} {sp.latex(f_expr)} d{var_int_choice} = F({b_lim}) - F({a_lim}) = {sp.latex(Fb)} - ({sp.latex(Fa)}) = {sp.latex(definite_val)}")
+            try:
+                st.latex(f"\\approx {float(definite_val.evalf()):.8f}")
+            except:
+                pass
+            st.info(f"Geometric meaning: Net signed area under $y=f(x)$ from $x={a_lim}$ to $x={b_lim}$ is {float(definite_val.evalf()):.6f}." if definite_val.is_number else "")
+
+        # Extra: u-sub example hint
+        if f_expr.has(sp.sin) and (var_int in f_expr.args[0].free_symbols if f_expr.args else False):
+            st.markdown("#### 💡 Pattern Recognition Tip")
+            st.markdown("Integrand contains $\\sin(g(x))$ or $\\cos(g(x))$ → Consider $u = g(x)$, $du = g'(x) dx$ substitution.")
+
+st.markdown("---")
+st.caption("Built with SymPy + Streamlit | All steps in English with theoretical introduction before solving | Educational purpose")

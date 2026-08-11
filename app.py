@@ -1,10 +1,10 @@
-# app.py – Enhanced version with detailed step-by-step LaTeX explanations and systems
+# app.py – Enhanced version with detailed step-by-step LaTeX explanations
 import streamlit as st
 import streamlit.components.v1 as components
 import math
 import sympy as sp
 from sympy import (symbols, diff, integrate, solve, latex, simplify, expand,
-                   sin, cos, tan, exp, log, Symbol, sqrt, pi, I, Matrix, eye, zeros)
+                   sin, cos, tan, exp, log, Symbol, sqrt, pi, I)
 from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application
 import re
 
@@ -29,6 +29,9 @@ st.markdown("""
     }
     .stButton > button:hover {
         transform: scale(1.02); box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    }
+    .step-counter {
+        font-size: 14px; color: #764ba2; font-weight: 600; margin-bottom: 10px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -56,25 +59,258 @@ class MathSolver:
         self.step_count += 1
         return self.step_count
 
-    # ---------- Basic Column Arithmetic (keep existing) ----------
+    # ---------- Detailed Basic Column Arithmetic ----------
     def manual_add(self, n1, n2):
-        # ... (keep your existing implementation)
-        pass
+        self.reset_step_count()
+        s1, s2 = str(abs(n1)), str(abs(n2))
+        max_len = max(len(s1), len(s2))
+        result = n1 + n2
+        result_str = str(result)
+        
+        # Calculate carries step by step
+        carries = []
+        carry = 0
+        p1, p2 = s1.zfill(max_len), s2.zfill(max_len)
+        
+        # Build detailed step-by-step
+        steps_html = ""
+        for i in range(max_len - 1, -1, -1):
+            digit_sum = int(p1[i]) + int(p2[i]) + carry
+            digit_result = digit_sum % 10
+            new_carry = digit_sum // 10
+            carries.insert(0, new_carry)
+            
+            if new_carry > 0 or carry > 0:
+                step_num = self.increment_step()
+                steps_html += f"""
+                <div class="step-detail">
+                    <span class="step-counter">Step {step_num}:</span>
+                    <p>Column {max_len - i}: <b>{p1[i]}</b> + <b>{p2[i]}</b> + carry <b>{carry}</b> = <b>{digit_sum}</b></p>
+                    <p style="margin-left: 20px;">→ Write <b>{digit_result}</b>, carry <b>{new_carry}</b> to next column</p>
+                </div>
+                """
+            carry = new_carry
+
+        # Final carry if exists
+        if carry > 0:
+            step_num = self.increment_step()
+            steps_html += f"""
+            <div class="step-detail">
+                <span class="step-counter">Step {step_num}:</span>
+                <p>Final carry: <b>{carry}</b> added to the front</p>
+            </div>
+            """
+
+        # Build visual display
+        width = max(len(s1), len(s2) + 2, len(result_str)) + 1
+        lines = []
+        if any(c > 0 for c in carries):
+            lines.append("".join(str(c) if c > 0 else " " for c in carries).rjust(width))
+        lines.append(s1.rjust(width))
+        lines.append(("+ " + s2).rjust(width))
+        lines.append("─" * width)
+        lines.append(result_str.rjust(width))
+
+        return f"""
+        <div class="theory-box">
+            <div class="theory-title">📚 Column Addition (Base-10 System)</div>
+            <p>Adding numbers digit by digit from right to left, carrying over when sum ≥ 10.</p>
+        </div>
+        <div class="step-box">
+            <div class="step-header">🔢 Step-by-Step Addition</div>
+            <pre class="manual-display">{chr(10).join(lines)}</pre>
+            <div class="steps-container">
+                {steps_html}
+            </div>
+            <div class="result-box">🎯 <strong>Result: {n1} + {n2} = {result}</strong></div>
+            <div class="verification">
+                <p>✅ Verification: {n1} + {n2} = {result}</p>
+            </div>
+        </div>"""
 
     def manual_sub(self, n1, n2):
-        # ... (keep your existing implementation)
-        pass
+        self.reset_step_count()
+        result = n1 - n2
+        s1, s2 = str(abs(n1)), str(abs(n2))
+        
+        # Detailed borrowing steps
+        steps_html = ""
+        max_len = max(len(s1), len(s2))
+        p1, p2 = s1.zfill(max_len), s2.zfill(max_len)
+        
+        borrow = 0
+        for i in range(max_len - 1, -1, -1):
+            digit1 = int(p1[i]) - borrow
+            digit2 = int(p2[i])
+            
+            if digit1 < digit2:
+                digit1 += 10
+                borrow = 1
+                step_num = self.increment_step()
+                steps_html += f"""
+                <div class="step-detail">
+                    <span class="step-counter">Step {step_num}:</span>
+                    <p>Column {max_len - i}: Need to borrow from next column</p>
+                    <p style="margin-left: 20px;"><b>{p1[i]}</b> becomes <b>{digit1}</b> (borrowed 10)</p>
+                    <p style="margin-left: 20px;">{digit1} - {digit2} = <b>{digit1 - digit2}</b></p>
+                </div>
+                """
+            else:
+                borrow = 0
+                step_num = self.increment_step()
+                steps_html += f"""
+                <div class="step-detail">
+                    <span class="step-counter">Step {step_num}:</span>
+                    <p>Column {max_len - i}: <b>{digit1}</b> - <b>{digit2}</b> = <b>{digit1 - digit2}</b></p>
+                </div>
+                """
+
+        width = max(len(s1), len(s2) + 2, len(str(result))) + 1
+        lines = [s1.rjust(width), ("- " + s2).rjust(width), "─" * width, str(result).rjust(width)]
+
+        return f"""
+        <div class="theory-box">
+            <div class="theory-title">📚 Column Subtraction (Borrowing Method)</div>
+            <p>Subtracting digits from right to left, borrowing from higher place when needed.</p>
+        </div>
+        <div class="step-box">
+            <div class="step-header">🔢 Step-by-Step Subtraction</div>
+            <pre class="manual-display">{chr(10).join(lines)}</pre>
+            <div class="steps-container">
+                {steps_html}
+            </div>
+            <div class="result-box">🎯 <strong>Result: {n1} - {n2} = {result}</strong></div>
+            <div class="verification">
+                <p>✅ Verification: {result} + {n2} = {result + n2}</p>
+            </div>
+        </div>"""
 
     def manual_mul(self, n1, n2):
-        # ... (keep your existing implementation)
-        pass
+        self.reset_step_count()
+        s1, s2 = str(abs(n1)), str(abs(n2))
+        result = n1 * n2
+        
+        # Long multiplication with detailed steps
+        steps_html = ""
+        partials = []
+        
+        # Calculate partial products
+        for i, d in enumerate(reversed(s2)):
+            digit = int(d)
+            partial = int(s1) * digit * (10 ** i)
+            partials.append(partial)
+            
+            step_num = self.increment_step()
+            steps_html += f"""
+            <div class="step-detail">
+                <span class="step-counter">Step {step_num}:</span>
+                <p>Multiply {s1} by digit <b>{digit}</b> in position {i + 1}</p>
+                <p style="margin-left: 20px;">{s1} × {digit} = <b>{int(s1) * digit}</b></p>
+                <p style="margin-left: 20px;">Place value × 10^{i} → <b>{partial}</b></p>
+            </div>
+            """
+
+        partials_rev = list(reversed(partials))
+        max_w = max(len(s1), len(s2) + 2, max([len(str(p)) for p in partials] or [0]), len(str(result))) + 1
+        
+        # Build visual
+        lines = [s1.rjust(max_w), ("× " + s2).rjust(max_w), "─" * max_w]
+        if len(s2) > 1:
+            for idx, p in enumerate(partials_rev):
+                prefix = "+ " if idx == len(partials_rev) - 1 else ""
+                lines.append((prefix + str(p)).rjust(max_w))
+            lines.append("─" * max_w)
+        lines.append(str(result).rjust(max_w))
+
+        # Final addition step
+        if len(partials) > 1:
+            step_num = self.increment_step()
+            steps_html += f"""
+            <div class="step-detail">
+                <span class="step-counter">Step {step_num}:</span>
+                <p>Add all partial products:</p>
+                <p style="margin-left: 20px;">{' + '.join(str(p) for p in reversed(partials))} = <b>{result}</b></p>
+            </div>
+            """
+
+        return f"""
+        <div class="theory-box">
+            <div class="theory-title">📚 Long Multiplication (Distributive Property)</div>
+            <p>Breaking multiplication into smaller steps: a × (b₁ + b₂ + ...) = a×b₁ + a×b₂ + ...</p>
+        </div>
+        <div class="step-box">
+            <div class="step-header">🔢 Step-by-Step Multiplication</div>
+            <pre class="manual-display">{chr(10).join(lines)}</pre>
+            <div class="steps-container">
+                {steps_html}
+            </div>
+            <div class="result-box">🎯 <strong>Result: {n1} × {n2} = {result}</strong></div>
+        </div>"""
 
     def manual_div(self, n1, n2):
-        # ... (keep your existing implementation)
-        pass
+        self.reset_step_count()
+        if n2 == 0:
+            return "<div class='step-box'>❌ Division by zero is undefined in mathematics.</div>"
+        
+        quotient = n1 // n2
+        remainder = n1 % n2
+        decimal_res = n1 / n2
+        
+        # Long division steps
+        steps_html = ""
+        dividend_str = str(abs(n1))
+        divisor_str = str(abs(n2))
+        
+        # Simulate long division for integers
+        if n1 >= 0 and n2 > 0:
+            current = 0
+            for i, digit in enumerate(dividend_str):
+                current = current * 10 + int(digit)
+                if current >= n2:
+                    q_digit = current // n2
+                    current = current % n2
+                    step_num = self.increment_step()
+                    steps_html += f"""
+                    <div class="step-detail">
+                        <span class="step-counter">Step {step_num}:</span>
+                        <p>Bring down digit <b>{digit}</b> → current = <b>{current if current == 0 else current + n2 * q_digit}</b></p>
+                        <p style="margin-left: 20px;">{current + n2 * q_digit} ÷ {n2} = <b>{q_digit}</b></p>
+                        <p style="margin-left: 20px;">Remainder: {current}</p>
+                    </div>
+                    """
+        
+        display = f" {n1} │ {n2}\n─────┼─────\n {remainder} │ {quotient} (Quotient)"
+        if remainder:
+            display += f"\nRemainder: {remainder}"
 
-    # ---------- Enhanced Linear Equation (1st Degree) - 7 Steps ----------
-    def solve_linear_detailed(self, eq_str):
+        # Decimal expansion steps
+        if remainder > 0:
+            step_num = self.increment_step()
+            steps_html += f"""
+            <div class="step-detail">
+                <span class="step-counter">Step {step_num}:</span>
+                <p>Converting to decimal:</p>
+                <p style="margin-left: 20px;">{remainder} ÷ {n2} = {decimal_res:.4f} (approximate)</p>
+            </div>
+            """
+
+        return f"""
+        <div class="theory-box">
+            <div class="theory-title">📚 Long Division (Division Algorithm)</div>
+            <p>Dividend = Divisor × Quotient + Remainder</p>
+            <p>Check: {n1} = {n2} × {quotient} + {remainder} → {n2 * quotient + remainder} = {n1} ✓</p>
+        </div>
+        <div class="step-box">
+            <div class="step-header">🔢 Step-by-Step Division</div>
+            <pre class="manual-display">{display}</pre>
+            <div class="steps-container">
+                {steps_html}
+            </div>
+            <div class="result-box">🎯 <strong>Result: {n1} ÷ {n2} = {quotient} (Rem {remainder}) | Decimal: {decimal_res:.4f}</strong></div>
+        </div>"""
+
+    # ---------- Detailed Algebra ----------
+    def solve_linear(self, eq_str):
         self.reset_step_count()
         try:
             if '=' not in eq_str:
@@ -87,15 +323,12 @@ class MathSolver:
             if left_expr is None or right_expr is None:
                 return "<div class='step-box'>❌ Invalid expression. Use x as variable.</div>"
             
-            # Step 1: Identify the equation
+            # Step 1: Move everything to one side
             step1 = self.increment_step()
-            
-            # Step 2: Move all terms to one side
-            step2 = self.increment_step()
             expr = expand(left_expr - right_expr)
             
-            # Step 3: Identify coefficients
-            step3 = self.increment_step()
+            # Step 2: Identify coefficients
+            step2 = self.increment_step()
             poly = sp.Poly(expr, self.x)
             coeffs = poly.all_coeffs()
             
@@ -109,112 +342,49 @@ class MathSolver:
             if a == 0:
                 return "<div class='step-box'>⚠️ Not a linear equation (a = 0).</div>"
             
-            # Step 4: Isolate the variable term
-            step4 = self.increment_step()
-            
-            # Step 5: Solve for x
-            step5 = self.increment_step()
+            # Step 3: Solve
+            step3 = self.increment_step()
             x_sol = -b / a
             latex_sol = latex(sp.nsimplify(x_sol))
             
-            # Step 6: Verify the solution
-            step6 = self.increment_step()
-            verification_left = left_expr.subs(self.x, x_sol)
-            verification_right = right_expr.subs(self.x, x_sol)
-            
-            # Step 7: Final check
-            step7 = self.increment_step()
+            # Step 4: Verify
+            step4 = self.increment_step()
+            verification = left_expr.subs(self.x, x_sol) - right_expr.subs(self.x, x_sol)
             
             return f"""
             <div class="theory-box">
-                <div class="theory-title">📚 Linear Equation (1st Degree) - Complete Resolution</div>
+                <div class="theory-title">📚 Linear Equation (1st Degree)</div>
                 <p>A linear equation in the form <b>ax + b = 0</b> has solution <b>x = -b/a</b></p>
-                <p><b>Key Concepts:</b></p>
-                <ul style="list-style-type: none; padding-left: 0;">
-                    <li>• Linear equations have the highest power of variable = 1</li>
-                    <li>• The solution is unique (one value of x)</li>
-                    <li>• We can verify by substituting back into original equation</li>
-                </ul>
             </div>
             <div class="step-box">
-                <div class="step-header">📝 Detailed Resolution (7 Steps)</div>
+                <div class="step-header">📝 Resolution Steps</div>
                 
                 <div class="step-detail">
-                    <span class="step-counter">Step {step1}: Identify the equation</span>
-                    <p>We have the equation:</p>
-                    <div class="formula-highlight">
-                        $$\\text{{Original equation: }} {latex(left_expr)} = {latex(right_expr)}$$
-                    </div>
-                    <p style="margin-left: 20px;">• Left side: <b>{latex(left_expr)}</b></p>
-                    <p style="margin-left: 20px;">• Right side: <b>{latex(right_expr)}</b></p>
+                    <span class="step-counter">Step {step1}:</span>
+                    <p>Move all terms to one side:</p>
+                    <div class="formula-highlight">$${latex(expr)} = 0$$</div>
                 </div>
                 
                 <div class="step-detail">
-                    <span class="step-counter">Step {step2}: Move all terms to one side</span>
-                    <p>Subtract the right side from both sides:</p>
+                    <span class="step-counter">Step {step2}:</span>
+                    <p>Identify coefficients:</p>
+                    <p style="margin-left: 20px;">a = <b>{a}</b>, b = <b>{b}</b></p>
+                </div>
+                
+                <div class="step-detail">
+                    <span class="step-counter">Step {step3}:</span>
+                    <p>Apply formula x = -b/a:</p>
                     <div class="formula-highlight">
-                        $${latex(left_expr)} - {latex(right_expr)} = 0$$
-                    </div>
-                    <p style="margin-left: 20px;">This gives us the standard form <b>ax + b = 0</b></p>
-                    <div class="formula-highlight">
-                        $${latex(expr)} = 0$$
+                        $$x = \\frac{{-({b})}}{{{a}}} = \\frac{{{-b}}}{{{a}}} = {latex_sol}$$
                     </div>
                 </div>
                 
                 <div class="step-detail">
-                    <span class="step-counter">Step {step3}: Identify coefficients a and b</span>
-                    <p>Compare with standard form <b>ax + b = 0</b>:</p>
-                    <div class="formula-highlight">
-                        $${latex(expr)} = 0$$
-                    </div>
-                    <p style="margin-left: 20px;">Coefficient of x: <b>a = {a}</b></p>
-                    <p style="margin-left: 20px;">Constant term: <b>b = {b}</b></p>
-                    <p style="margin-left: 20px;">Verification: <b>{a}x + {b} = 0</b> ✓</p>
-                </div>
-                
-                <div class="step-detail">
-                    <span class="step-counter">Step {step4}: Isolate the variable term</span>
-                    <p>Move the constant term to the right side:</p>
-                    <div class="formula-highlight">
-                        $${a}x = -{b}$$
-                    </div>
-                    <p style="margin-left: 20px;">• Subtract <b>{b}</b> from both sides</p>
-                    <p style="margin-left: 20px;">• The variable term is now isolated</p>
-                </div>
-                
-                <div class="step-detail">
-                    <span class="step-counter">Step {step5}: Solve for x</span>
-                    <p>Divide both sides by the coefficient <b>a</b>:</p>
-                    <div class="formula-highlight">
-                        $$x = \\frac{{-{b}}}{{{a}}} = {latex_sol}$$
-                    </div>
-                    <p style="margin-left: 20px;">• Division property: if ax = b, then x = b/a</p>
-                    <p style="margin-left: 20px;">• Final value: <b>x = {latex_sol}</b></p>
-                </div>
-                
-                <div class="step-detail">
-                    <span class="step-counter">Step {step6}: Verify the solution</span>
-                    <p>Substitute x = {latex_sol} back into the original equation:</p>
-                    <p style="margin-left: 20px;">Left side: <b>{latex(left_expr)}</b> → <b>{latex(verification_left)}</b></p>
-                    <p style="margin-left: 20px;">Right side: <b>{latex(right_expr)}</b> → <b>{latex(verification_right)}</b></p>
-                    <div class="formula-highlight">
-                        $${latex(verification_left)} = {latex(verification_right)}$$
-                    </div>
-                    <p style="margin-left: 20px;">Both sides equal! ✓</p>
-                </div>
-                
-                <div class="step-detail">
-                    <span class="step-counter">Step {step7}: Final check and conclusion</span>
-                    <p>We have successfully solved the equation:</p>
-                    <div class="formula-highlight">
-                        $$\\boxed{{x = {latex_sol}}}$$
-                    </div>
-                    <div class="verification">
-                        <p>✅ <b>Verification complete:</b></p>
-                        <p>Original: <b>{eq_str}</b></p>
-                        <p>Substitute x = {latex_sol}:</p>
-                        <p><b>{latex(left_expr.subs(self.x, x_sol))} = {latex(right_expr.subs(self.x, x_sol))}</b> ✓</p>
-                    </div>
+                    <span class="step-counter">Step {step4}:</span>
+                    <p>Verify by substituting back:</p>
+                    <p style="margin-left: 20px;">$${latex(left_expr)} = {latex(left_expr.subs(self.x, x_sol))}$$</p>
+                    <p style="margin-left: 20px;">$${latex(right_expr)} = {latex(right_expr.subs(self.x, x_sol))}$$</p>
+                    <p style="margin-left: 20px;">✅ Both sides equal: <b>{latex(sp.nsimplify(verification))} = 0</b></p>
                 </div>
                 
                 <div class="result-box">🎯 <strong>Solution: $x = {latex_sol}$</strong></div>
@@ -222,8 +392,7 @@ class MathSolver:
         except Exception as e:
             return f"<div class='step-box'>❌ Error: {str(e)}</div>"
 
-    # ---------- Enhanced Quadratic Equation (2nd Degree) - 7 Steps ----------
-    def solve_quadratic_detailed(self, func_str):
+    def solve_quadratic(self, func_str):
         self.reset_step_count()
         try:
             if '=' in func_str:
@@ -235,14 +404,8 @@ class MathSolver:
             if expr is None:
                 return "<div class='step-box'>❌ Invalid expression.</div>"
             
-            # Step 1: Identify the quadratic equation
+            # Step 1: Identify coefficients
             step1 = self.increment_step()
-            
-            # Step 2: Put in standard form
-            step2 = self.increment_step()
-            
-            # Step 3: Identify coefficients a, b, c
-            step3 = self.increment_step()
             poly = sp.Poly(expr, self.x)
             coeffs = poly.all_coeffs()
             a, b, c = 0, 0, 0
@@ -256,420 +419,263 @@ class MathSolver:
             if a == 0:
                 return "<div class='step-box'>⚠️ Not quadratic (a = 0).</div>"
             
-            # Step 4: Calculate discriminant
-            step4 = self.increment_step()
+            # Step 2: Calculate discriminant
+            step2 = self.increment_step()
             disc = b**2 - 4*a*c
             
-            # Step 5: Analyze discriminant
-            step5 = self.increment_step()
-            
-            # Step 6: Apply Bhaskara formula
-            step6 = self.increment_step()
-            
-            # Step 7: Verify solutions
-            step7 = self.increment_step()
+            # Step 3: Apply Bhaskara formula
+            step3 = self.increment_step()
             
             base = f"""
             <div class="theory-box">
-                <div class="theory-title">📚 Quadratic Equation (Bhaskara Formula) - Complete Resolution</div>
+                <div class="theory-title">📚 Quadratic Equation (Bhaskara Formula)</div>
                 <p>For ax² + bx + c = 0:</p>
                 <div class="formula-highlight">
                     $$x = \\frac{{-b \\pm \\sqrt{{b^2 - 4ac}}}}{{2a}}$$
                 </div>
-                <p><b>Key Concepts:</b></p>
-                <ul style="list-style-type: none; padding-left: 0;">
-                    <li>• Δ = b² - 4ac (discriminant)</li>
-                    <li>• Δ > 0: two real distinct roots</li>
-                    <li>• Δ = 0: one real double root</li>
-                    <li>• Δ < 0: two complex conjugate roots</li>
-                </ul>
+                <p>Where Δ = b² - 4ac is the discriminant</p>
             </div>
             <div class="step-box">
-                <div class="step-header">📝 Detailed Resolution (7 Steps)</div>
+                <div class="step-header">📝 Resolution Steps</div>
                 
                 <div class="step-detail">
-                    <span class="step-counter">Step {step1}: Identify the quadratic equation</span>
-                    <p>The given equation is:</p>
+                    <span class="step-counter">Step {step1}:</span>
+                    <p>Identify coefficients:</p>
+                    <p style="margin-left: 20px;">a = <b>{a}</b>, b = <b>{b}</b>, c = <b>{c}</b></p>
+                </div>
+                
+                <div class="step-detail">
+                    <span class="step-counter">Step {step2}:</span>
+                    <p>Calculate discriminant:</p>
                     <div class="formula-highlight">
-                        $${latex(expr)} = 0$$
+                        $$\\Delta = {b}^2 - 4({a})({c}) = {b**2} - {4*a*c} = {disc}$$
                     </div>
-                    <p style="margin-left: 20px;">This is a <b>quadratic equation</b> because the highest power of x is 2</p>
+                    <p style="margin-left: 20px;">Δ <b>{'≥' if disc >= 0 else '<'} 0</b> → {'two real roots' if disc > 0 else 'one real root' if disc == 0 else 'two complex roots'}</p>
                 </div>
                 
                 <div class="step-detail">
-                    <span class="step-counter">Step {step2}: Standard form</span>
-                    <p>The equation is already in standard form <b>ax² + bx + c = 0</b>:</p>
-                    <div class="formula-highlight">
-                        $${latex(expr)} = 0$$
-                    </div>
-                    <p style="margin-left: 20px;">No further simplification needed</p>
-                </div>
-                
-                <div class="step-detail">
-                    <span class="step-counter">Step {step3}: Identify coefficients</span>
-                    <p>Compare with <b>ax² + bx + c = 0</b>:</p>
-                    <p style="margin-left: 20px;"><b>a</b> (coefficient of x²) = <b>{a}</b></p>
-                    <p style="margin-left: 20px;"><b>b</b> (coefficient of x) = <b>{b}</b></p>
-                    <p style="margin-left: 20px;"><b>c</b> (constant term) = <b>{c}</b></p>
-                    <div class="formula-highlight">
-                        $${a}x² + {b}x + {c} = 0$$
-                    </div>
-                </div>
-                
-                <div class="step-detail">
-                    <span class="step-counter">Step {step4}: Calculate the discriminant</span>
-                    <p>The discriminant Δ = b² - 4ac determines the nature of roots:</p>
-                    <div class="formula-highlight">
-                        $$\\Delta = {b}^2 - 4({a})({c})$$
-                    </div>
-                    <p style="margin-left: 20px;">Δ = {b**2} - {4*a*c} = <b>{disc}</b></p>
-                    <p style="margin-left: 20px;">Δ <b>{'≥' if disc >= 0 else '<'} 0</b></p>
-                </div>
-                
-                <div class="step-detail">
-                    <span class="step-counter">Step {step5}: Analyze the discriminant</span>
-                    <p>Since Δ {'= ' + str(disc) if disc >= 0 else ' = ' + str(disc) + ' (negative)'}:</p>
-                    <ul style="margin-left: 20px;">
-                        <li>Δ {'> 0' if disc > 0 else '= 0' if disc == 0 else '< 0'}</li>
-                        <li>Nature of roots: <b>{'Two real distinct roots' if disc > 0 else 'One real double root' if disc == 0 else 'Two complex conjugate roots'}</b></li>
-                    </ul>
-                </div>
-                
-                <div class="step-detail">
-                    <span class="step-counter">Step {step6}: Apply Bhaskara formula</span>
-                    <p>Using the formula $x = \\frac{{-b \\pm \\sqrt{{\\Delta}}}}{{2a}}$:</p>
-                    <div class="formula-highlight">
-                        $$x = \\frac{{-({b}) \\pm \\sqrt{{{disc}}}}}{{2({a})}}$$
-                    </div>"""
+                    <span class="step-counter">Step {step3}:</span>
+                    <p>Apply Bhaskara formula:</p>"""
             
             if disc >= 0:
                 sqrt_disc = math.sqrt(disc)
                 x1 = (-b + sqrt_disc) / (2*a)
                 x2 = (-b - sqrt_disc) / (2*a)
                 base += f"""
-                    <p style="margin-left: 20px;">With Δ = {disc}, √Δ = {sqrt_disc:.4f}</p>
+                    <div class="formula-highlight">
+                        $$x = \\frac{{-({b}) \\pm \\sqrt{{{disc}}}}}{{2({a})}}$$
+                    </div>
                     <p style="margin-left: 20px;">x₁ = (-{b} + {sqrt_disc:.4f}) / {2*a} = <b>{latex(sp.nsimplify(x1))}</b></p>
                     <p style="margin-left: 20px;">x₂ = (-{b} - {sqrt_disc:.4f}) / {2*a} = <b>{latex(sp.nsimplify(x2))}</b></p>
-                """
+                    <div class="result-box">🎯 <strong>Roots: $x_1 = {latex(sp.nsimplify(x1))},\\; x_2 = {latex(sp.nsimplify(x2))}$</strong></div>"""
             else:
                 real_p = -b / (2*a)
                 imag_p = math.sqrt(-disc) / (2*a)
                 base += f"""
+                    <div class="formula-highlight">
+                        $$x = \\frac{{-({b}) \\pm \\sqrt{{{disc}}}}}{{2({a})}}$$
+                    </div>
                     <p style="margin-left: 20px;">Since Δ < 0, we have complex roots:</p>
                     <p style="margin-left: 20px;">Real part = <b>{real_p:.4f}</b>, Imaginary part = <b>{imag_p:.4f}</b></p>
-                    <div class="formula-highlight">
-                        $$x = {real_p:.4f} \\pm {imag_p:.4f}i$$
-                    </div>
-                """
+                    <div class="result-box">🎯 <strong>Complex roots: $x = {real_p:.4f} \\pm {imag_p:.4f}i$</strong></div>"""
             
-            base += f"""
+            base += """
                 </div>
-                
-                <div class="step-detail">
-                    <span class="step-counter">Step {step7}: Verify the solutions</span>
-                    <p>Substitute each root back into the original equation:</p>"""
-            
-            if disc >= 0:
-                x1_sym = sp.nsimplify(x1)
-                x2_sym = sp.nsimplify(x2)
-                v1 = expr.subs(self.x, x1_sym)
-                v2 = expr.subs(self.x, x2_sym)
-                base += f"""
-                    <p style="margin-left: 20px;">For x₁ = {latex(x1_sym)}:</p>
-                    <p style="margin-left: 40px;">{latex(expr.subs(self.x, x1_sym))} = {latex(v1)} ≈ 0 ✓</p>
-                    <p style="margin-left: 20px;">For x₂ = {latex(x2_sym)}:</p>
-                    <p style="margin-left: 40px;">{latex(expr.subs(self.x, x2_sym))} = {latex(v2)} ≈ 0 ✓</p>
-                """
-            else:
-                base += """
-                    <p style="margin-left: 20px;">Complex roots cannot be easily verified numerically, but they satisfy the equation algebraically.</p>
-                """
-            
-            base += f"""
-                    <div class="verification">
-                        <p>✅ <b>Verification complete:</b> All roots satisfy the original equation</p>
-                    </div>
-                </div>
-                
-                <div class="result-box">🎯 <strong>{'Roots: $x_1 = ' + latex(sp.nsimplify(x1)) + ',\\; x_2 = ' + latex(sp.nsimplify(x2)) + '$' if disc >= 0 else 'Complex roots: $x = ' + str(real_p) + ' \\pm ' + str(imag_p) + 'i$'}</strong></div>
             </div>"""
             return base
         except Exception as e:
             return f"<div class='step-box'>❌ Error: {str(e)}</div>"
 
-    # ---------- Systems of Linear Equations ----------
-    def solve_system_2x2(self, eq1_str, eq2_str):
+    # ---------- Detailed Calculus ----------
+    def differentiate(self, func_str, var='x', eval_pt=None):
         self.reset_step_count()
         try:
-            # Parse equations
-            if '=' not in eq1_str or '=' not in eq2_str:
-                return "<div class='step-box'>❌ Each equation must contain '='.</div>"
+            expr = self.parse_func(func_str)
+            if expr is None:
+                return "<div class='step-box'>❌ Invalid function.</div>"
             
-            # Step 1: Identify the system
+            sym_var = Symbol(var)
+            
+            # Step 1: Identify function
             step1 = self.increment_step()
             
-            left1, right1 = eq1_str.split('=')
-            left2, right2 = eq2_str.split('=')
-            
-            expr1 = self.parse_func(left1) - self.parse_func(right1)
-            expr2 = self.parse_func(left2) - self.parse_func(right2)
-            
-            if expr1 is None or expr2 is None:
-                return "<div class='step-box'>❌ Invalid expressions.</div>"
-            
-            # Step 2: Put in standard form
+            # Step 2: Apply differentiation rules
             step2 = self.increment_step()
+            df = diff(expr, sym_var)
             
-            # Step 3: Identify coefficients
+            # Step 3: Simplify
             step3 = self.increment_step()
+            simplified_df = simplify(df)
             
-            # Step 4: Choose method (substitution or elimination)
-            step4 = self.increment_step()
-            
-            # Step 5: Solve for x and y
-            step5 = self.increment_step()
-            
-            # Solve using sympy
-            sol = solve((expr1, expr2), (self.x, self.y))
-            
-            # Step 6: Verify
-            step6 = self.increment_step()
-            
-            # Step 7: Final conclusion
-            step7 = self.increment_step()
-            
-            if not sol:
-                return "<div class='step-box'>⚠️ No solution found (system may be inconsistent).</div>"
-            
-            x_sol, y_sol = sol[self.x], sol[self.y]
-            
-            return f"""
+            html = f"""
             <div class="theory-box">
-                <div class="theory-title">📚 System of Linear Equations (2 Variables)</div>
-                <p>Solving systems of 2 linear equations with 2 variables:</p>
+                <div class="theory-title">📚 Differentiation Rules</div>
+                <p>Basic rules: Power rule, Chain rule, Sum rule, Product rule</p>
                 <ul style="list-style-type: none; padding-left: 0;">
-                    <li>• <b>Substitution method:</b> Solve one equation for one variable</li>
-                    <li>• <b>Elimination method:</b> Add/subtract equations to eliminate a variable</li>
-                    <li>• <b>Graphical method:</b> Find intersection point</li>
+                    <li>• Power rule: d/dx[xⁿ] = nxⁿ⁻¹</li>
+                    <li>• Chain rule: d/dx[f(g(x))] = f'(g(x))·g'(x)</li>
+                    <li>• Sum rule: d/dx[f+g] = f' + g'</li>
                 </ul>
             </div>
             <div class="step-box">
-                <div class="step-header">📝 Detailed Resolution (7 Steps)</div>
+                <div class="step-header">📈 Differentiation Steps</div>
                 
                 <div class="step-detail">
-                    <span class="step-counter">Step {step1}: Identify the system</span>
-                    <p>The system of equations is:</p>
-                    <div class="formula-highlight">
-                        $$\\begin{{cases}} {latex(expr1)} = 0 \\\\ {latex(expr2)} = 0 \\end{{cases}}$$
-                    </div>
-                    <p style="margin-left: 20px;">Variables: <b>x</b> and <b>y</b></p>
-                    <p style="margin-left: 20px;">Goal: Find values of x and y that satisfy both equations</p>
+                    <span class="step-counter">Step {step1}:</span>
+                    <p>Identify the function to differentiate:</p>
+                    <div class="formula-highlight">$$f({var}) = {latex(expr)}$$</div>
                 </div>
                 
                 <div class="step-detail">
-                    <span class="step-counter">Step {step2}: Standard form</span>
-                    <p>Both equations are in standard form <b>ax + by + c = 0</b>:</p>
-                    <div class="formula-highlight">
-                        $$\\begin{{cases}} {latex(expr1)} = 0 \\\\ {latex(expr2)} = 0 \\end{{cases}}$$
-                    </div>
-                </div>
-                
-                <div class="step-detail">
-                    <span class="step-counter">Step {step3}: Identify coefficients</span>
-                    <p>Extract coefficients from both equations:</p>
-                    <p style="margin-left: 20px;">Eq1: <b>{latex(expr1)} = 0</b></p>
-                    <p style="margin-left: 40px;">Coefficient of x: <b>{sp.Poly(expr1, self.x).coeff_monomial(self.x)}</b></p>
-                    <p style="margin-left: 40px;">Coefficient of y: <b>{sp.Poly(expr1, self.y).coeff_monomial(self.y)}</b></p>
-                    <p style="margin-left: 40px;">Constant: <b>{sp.Poly(expr1, self.x).coeff_monomial(1)}</b></p>
-                    <p style="margin-left: 20px;">Eq2: <b>{latex(expr2)} = 0</b></p>
-                    <p style="margin-left: 40px;">Coefficient of x: <b>{sp.Poly(expr2, self.x).coeff_monomial(self.x)}</b></p>
-                    <p style="margin-left: 40px;">Coefficient of y: <b>{sp.Poly(expr2, self.y).coeff_monomial(self.y)}</b></p>
-                    <p style="margin-left: 40px;">Constant: <b>{sp.Poly(expr2, self.x).coeff_monomial(1)}</b></p>
-                </div>
-                
-                <div class="step-detail">
-                    <span class="step-counter">Step {step4}: Choose solution method</span>
-                    <p>We will use the <b>elimination method</b>:</p>
-                    <ul style="margin-left: 20px;">
-                        <li>Multiply equations by appropriate constants to make coefficients equal</li>
-                        <li>Add/subtract equations to eliminate one variable</li>
-                        <li>Solve the resulting single-variable equation</li>
-                    </ul>
-                </div>
-                
-                <div class="step-detail">
-                    <span class="step-counter">Step {step5}: Solve for x and y</span>
-                    <p>Using the elimination method:</p>
-                    <div class="formula-highlight">
-                        $$\\begin{{cases}} {latex(expr1)} = 0 \\\\ {latex(expr2)} = 0 \\end{{cases}}$$
-                    </div>
-                    <p style="margin-left: 20px;">Solution found:</p>
-                    <p style="margin-left: 40px;">x = <b>{latex(sp.nsimplify(x_sol))}</b></p>
-                    <p style="margin-left: 40px;">y = <b>{latex(sp.nsimplify(y_sol))}</b></p>
-                </div>
-                
-                <div class="step-detail">
-                    <span class="step-counter">Step {step6}: Verify the solution</span>
-                    <p>Substitute x = {latex(sp.nsimplify(x_sol))} and y = {latex(sp.nsimplify(y_sol))} into both equations:</p>
-                    <p style="margin-left: 20px;">Eq1: <b>{latex(expr1.subs({self.x: x_sol, self.y: y_sol}))}</b> ≈ 0 ✓</p>
-                    <p style="margin-left: 20px;">Eq2: <b>{latex(expr2.subs({self.x: x_sol, self.y: y_sol}))}</b> ≈ 0 ✓</p>
-                    <div class="verification">
-                        <p>✅ <b>Verification complete:</b> Both equations are satisfied</p>
+                    <span class="step-counter">Step {step2}:</span>
+                    <p>Apply differentiation rules:</p>
+                    <div class="formula-highlight">$$f'({var}) = {latex(df)}$$</div>
+                    <div class="step-breakdown">
+                        <p>Breakdown of each term:</p>
+            """
+            
+            # Show breakdown of each term
+            if expr.is_Add:
+                terms = expr.as_ordered_terms()
+                for term in terms:
+                    term_diff = diff(term, sym_var)
+                    html += f"""
+                        <p style="margin-left: 20px;">• d/dx[{latex(term)}] = {latex(term_diff)}</p>
+                    """
+            
+            html += f"""
                     </div>
                 </div>
                 
                 <div class="step-detail">
-                    <span class="step-counter">Step {step7}: Final conclusion</span>
-                    <p>The system has a unique solution:</p>
-                    <div class="formula-highlight">
-                        $$\\boxed{{x = {latex(sp.nsimplify(x_sol))}, \\; y = {latex(sp.nsimplify(y_sol))}}}$$
-                    </div>
-                    <p style="margin-left: 20px;">The point <b>({latex(sp.nsimplify(x_sol))}, {latex(sp.nsimplify(y_sol))})</b> is the intersection of the two lines.</p>
+                    <span class="step-counter">Step {step3}:</span>
+                    <p>Simplify the result:</p>
+                    <div class="formula-highlight">$$f'({var}) = {latex(simplified_df)}$$</div>
                 </div>
-                
-                <div class="result-box">🎯 <strong>Solution: $x = {latex(sp.nsimplify(x_sol))},\\; y = {latex(sp.nsimplify(y_sol))}$</strong></div>
+            """
+            
+            if eval_pt and str(eval_pt).strip():
+                step4 = self.increment_step()
+                try:
+                    pt = parse_expr(str(eval_pt).replace('^', '**'))
+                    val = simplified_df.subs(sym_var, pt)
+                    html += f"""
+                    <div class="step-detail">
+                        <span class="step-counter">Step {step4}:</span>
+                        <p>Evaluate at $x = {latex(pt)}$:</p>
+                        <div class="formula-highlight">
+                            $$f'({latex(pt)}) = {latex(val)}$$
+                            {'≈ ' + f'{float(val):.4f}' if val.is_number and not val.is_Integer else ''}
+                        </div>
+                    </div>
+                    """
+                except Exception:
+                    html += "<p><i>Could not evaluate at that point.</i></p>"
+            
+            html += f"""
+                <div class="result-box">🎯 $$\\boxed{{f'({var}) = {latex(simplified_df)}}}$$</div>
             </div>"""
+            return html
         except Exception as e:
             return f"<div class='step-box'>❌ Error: {str(e)}</div>"
 
-    def solve_system_3x3(self, eq1_str, eq2_str, eq3_str):
+    def integrate_func(self, func_str, var='x', lower=None, upper=None):
         self.reset_step_count()
         try:
-            # Parse equations
-            if '=' not in eq1_str or '=' not in eq2_str or '=' not in eq3_str:
-                return "<div class='step-box'>❌ Each equation must contain '='.</div>"
+            expr = self.parse_func(func_str)
+            if expr is None:
+                return "<div class='step-box'>❌ Invalid function.</div>"
             
-            # Step 1: Identify the system
+            sym_var = Symbol(var)
+            
+            # Step 1: Identify function
             step1 = self.increment_step()
             
-            left1, right1 = eq1_str.split('=')
-            left2, right2 = eq2_str.split('=')
-            left3, right3 = eq3_str.split('=')
-            
-            expr1 = self.parse_func(left1) - self.parse_func(right1)
-            expr2 = self.parse_func(left2) - self.parse_func(right2)
-            expr3 = self.parse_func(left3) - self.parse_func(right3)
-            
-            if expr1 is None or expr2 is None or expr3 is None:
-                return "<div class='step-box'>❌ Invalid expressions.</div>"
-            
-            # Step 2: Standard form
+            # Step 2: Find antiderivative
             step2 = self.increment_step()
+            primitive = integrate(expr, sym_var)
             
-            # Step 3: Matrix representation
+            # Step 3: Simplify
             step3 = self.increment_step()
+            simplified_prim = simplify(primitive)
             
-            # Step 4: Choose method (Gaussian elimination)
-            step4 = self.increment_step()
-            
-            # Step 5: Forward elimination
-            step5 = self.increment_step()
-            
-            # Step 6: Back substitution
-            step6 = self.increment_step()
-            
-            # Step 7: Verify solution
-            step7 = self.increment_step()
-            
-            # Solve using sympy
-            sol = solve((expr1, expr2, expr3), (self.x, self.y, self.z))
-            
-            if not sol:
-                return "<div class='step-box'>⚠️ No unique solution found.</div>"
-            
-            x_sol, y_sol, z_sol = sol[self.x], sol[self.y], sol[self.z]
-            
-            return f"""
+            html = f"""
             <div class="theory-box">
-                <div class="theory-title">📚 System of Linear Equations (3 Variables)</div>
-                <p>Solving systems of 3 linear equations with 3 variables:</p>
+                <div class="theory-title">📚 Integration Rules</div>
+                <p>Basic rules: Power rule (reverse), Linearity</p>
                 <ul style="list-style-type: none; padding-left: 0;">
-                    <li>• <b>Gaussian elimination:</b> Transform to row-echelon form</li>
-                    <li>• <b>Matrix method:</b> Use determinant and Cramer's rule</li>
-                    <li>• <b>Substitution method:</b> Solve step by step</li>
+                    <li>• Power rule: ∫xⁿ dx = xⁿ⁺¹/(n+1) + C</li>
+                    <li>• Constant multiple: ∫k·f(x) dx = k·∫f(x) dx</li>
+                    <li>• Sum rule: ∫(f+g) dx = ∫f dx + ∫g dx</li>
                 </ul>
             </div>
             <div class="step-box">
-                <div class="step-header">📝 Detailed Resolution (7 Steps)</div>
+                <div class="step-header">📊 Integration Steps</div>
                 
                 <div class="step-detail">
-                    <span class="step-counter">Step {step1}: Identify the system</span>
-                    <p>The system of 3 equations with 3 variables is:</p>
-                    <div class="formula-highlight">
-                        $$\\begin{{cases}} {latex(expr1)} = 0 \\\\ {latex(expr2)} = 0 \\\\ {latex(expr3)} = 0 \\end{{cases}}$$
-                    </div>
-                    <p style="margin-left: 20px;">Variables: <b>x</b>, <b>y</b>, and <b>z</b></p>
-                    <p style="margin-left: 20px;">Goal: Find values of x, y, and z that satisfy all three equations</p>
+                    <span class="step-counter">Step {step1}:</span>
+                    <p>Identify the function to integrate:</p>
+                    <div class="formula-highlight">$$\\int {latex(expr)} \\, d{var}$$</div>
                 </div>
                 
                 <div class="step-detail">
-                    <span class="step-counter">Step {step2}: Standard form</span>
-                    <p>All equations are in standard form <b>ax + by + cz + d = 0</b>:</p>
-                    <div class="formula-highlight">
-                        $$\\begin{{cases}} {latex(expr1)} = 0 \\\\ {latex(expr2)} = 0 \\\\ {latex(expr3)} = 0 \\end{{cases}}$$
-                    </div>
-                </div>
-                
-                <div class="step-detail">
-                    <span class="step-counter">Step {step3}: Matrix representation</span>
-                    <p>Represent the system as an augmented matrix:</p>
-                    <div class="formula-highlight">
-                        $$\\begin{{bmatrix}}
-                        {sp.Poly(expr1, self.x).coeff_monomial(self.x)} & {sp.Poly(expr1, self.y).coeff_monomial(self.y)} & {sp.Poly(expr1, self.z).coeff_monomial(self.z)} & | & {sp.Poly(expr1, self.x).coeff_monomial(1)} \\\\
-                        {sp.Poly(expr2, self.x).coeff_monomial(self.x)} & {sp.Poly(expr2, self.y).coeff_monomial(self.y)} & {sp.Poly(expr2, self.z).coeff_monomial(self.z)} & | & {sp.Poly(expr2, self.x).coeff_monomial(1)} \\\\
-                        {sp.Poly(expr3, self.x).coeff_monomial(self.x)} & {sp.Poly(expr3, self.y).coeff_monomial(self.y)} & {sp.Poly(expr3, self.z).coeff_monomial(self.z)} & | & {sp.Poly(expr3, self.x).coeff_monomial(1)}
-                        \\end{{bmatrix}}$$
+                    <span class="step-counter">Step {step2}:</span>
+                    <p>Find antiderivative:</p>
+                    <div class="formula-highlight">$$F({var}) = {latex(primitive)}$$</div>
+                    <div class="step-breakdown">
+                        <p>Breakdown of each term:</p>
+            """
+            
+            # Show breakdown of each term
+            if expr.is_Add:
+                terms = expr.as_ordered_terms()
+                for term in terms:
+                    term_int = integrate(term, sym_var)
+                    html += f"""
+                        <p style="margin-left: 20px;">• ∫{latex(term)} d{var} = {latex(term_int)}</p>
+                    """
+            
+            html += f"""
                     </div>
                 </div>
                 
                 <div class="step-detail">
-                    <span class="step-counter">Step {step4}: Choose solution method</span>
-                    <p>We will use <b>Gaussian elimination</b> with the following steps:</p>
-                    <ul style="margin-left: 20px;">
-                        <li>Forward elimination to create zeros below the diagonal</li>
-                        <li>Back substitution to find the values of variables</li>
-                    </ul>
+                    <span class="step-counter">Step {step3}:</span>
+                    <p>Simplify the antiderivative:</p>
+                    <div class="formula-highlight">$$F({var}) = {latex(simplified_prim)}$$</div>
                 </div>
-                
-                <div class="step-detail">
-                    <span class="step-counter">Step {step5}: Forward elimination</span>
-                    <p>Eliminate variables to get upper triangular form:</p>
-                    <ul style="margin-left: 20px;">
-                        <li>Use row operations to create zeros in lower-left positions</li>
-                        <li>System becomes easier to solve step by step</li>
-                    </ul>
-                    <div class="formula-highlight">
-                        $$\\begin{{cases}} {latex(expr1)} = 0 \\\\ {latex(expr2 - \\text{{multiplier}} \\times expr1)} = 0 \\\\ {latex(expr3 - \\text{{multiplier}} \\times expr1)} = 0 \\end{{cases}}$$
+            """
+            
+            if lower and upper and str(lower).strip() and str(upper).strip():
+                step4 = self.increment_step()
+                try:
+                    a = parse_expr(str(lower).replace('^', '**'))
+                    b = parse_expr(str(upper).replace('^', '**'))
+                    Fb = simplified_prim.subs(sym_var, b)
+                    Fa = simplified_prim.subs(sym_var, a)
+                    def_res = simplify(Fb - Fa)
+                    html += f"""
+                    <div class="step-detail">
+                        <span class="step-counter">Step {step4}:</span>
+                        <p>Apply Fundamental Theorem of Calculus:</p>
+                        <div class="formula-highlight">
+                            $$\\int_{{{latex(a)}}}^{{{latex(b)}}} {latex(expr)} \\, d{var} = F({latex(b)}) - F({latex(a)})$$
+                        </div>
+                        <p style="margin-left: 20px;">F({latex(b)}) = {latex(Fb)}</p>
+                        <p style="margin-left: 20px;">F({latex(a)}) = {latex(Fa)}</p>
+                        <p style="margin-left: 20px;">Result = {latex(Fb)} - {latex(Fa)} = <b>{latex(def_res)}</b></p>
+                        <div class="result-box">🎯 $$\\boxed{{= {latex(def_res)}}}$$</div>
                     </div>
-                </div>
-                
-                <div class="step-detail">
-                    <span class="step-counter">Step {step6}: Back substitution</span>
-                    <p>Solve from the last equation backwards:</p>
-                    <ul style="margin-left: 20px;">
-                        <li>Solve for z from the third equation</li>
-                        <li>Substitute z into the second equation to find y</li>
-                        <li>Substitute y and z into the first equation to find x</li>
-                    </ul>
-                    <p style="margin-left: 20px;">Solution found:</p>
-                    <p style="margin-left: 40px;">x = <b>{latex(sp.nsimplify(x_sol))}</b></p>
-                    <p style="margin-left: 40px;">y = <b>{latex(sp.nsimplify(y_sol))}</b></p>
-                    <p style="margin-left: 40px;">z = <b>{latex(sp.nsimplify(z_sol))}</b></p>
-                </div>
-                
-                <div class="step-detail">
-                    <span class="step-counter">Step {step7}: Verify the solution</span>
-                    <p>Substitute x = {latex(sp.nsimplify(x_sol))}, y = {latex(sp.nsimplify(y_sol))}, and z = {latex(sp.nsimplify(z_sol))} into all three equations:</p>
-                    <p style="margin-left: 20px;">Eq1: <b>{latex(expr1.subs({self.x: x_sol, self.y: y_sol, self.z: z_sol}))}</b> ≈ 0 ✓</p>
-                    <p style="margin-left: 20px;">Eq2: <b>{latex(expr2.subs({self.x: x_sol, self.y: y_sol, self.z: z_sol}))}</b> ≈ 0 ✓</p>
-                    <p style="margin-left: 20px;">Eq3: <b>{latex(expr3.subs({self.x: x_sol, self.y: y_sol, self.z: z_sol}))}</b> ≈ 0 ✓</p>
-                    <div class="verification">
-                        <p>✅ <b>Verification complete:</b> All three equations are satisfied</p>
-                    </div>
-                </div>
-                
-                <div class="result-box">🎯 <strong>Solution: $x = {latex(sp.nsimplify(x_sol))},\\; y = {latex(sp.nsimplify(y_sol))},\\; z = {latex(sp.nsimplify(z_sol))}$</strong></div>
-            </div>"""
+                    """
+                except Exception:
+                    html += "<p><i>Invalid limits.</i></p>"
+            else:
+                html += f"""
+                <div class="result-box">🎯 $$\\boxed{{ \\int {latex(expr)} \\, d{var} = {latex(simplified_prim)} + C }}$$</div>
+                """
+            
+            html += "</div>"
+            return html
         except Exception as e:
             return f"<div class='step-box'>❌ Error: {str(e)}</div>"
 
@@ -686,15 +692,13 @@ if 'iframe_version' not in st.session_state:
     st.session_state.iframe_version = 0
 
 st.markdown('<h1 class="main-title">🧮 HandCalc Pro</h1>', unsafe_allow_html=True)
-st.markdown('<p class="subtitle">Step‑by‑Step Mathematics – Complete resolutions with 7 detailed steps</p>', unsafe_allow_html=True)
+st.markdown('<p class="subtitle">Step‑by‑Step Mathematics – Every carry, every derivative explained in detail</p>', unsafe_allow_html=True)
 
 with st.sidebar:
     mode = st.selectbox("Operation mode:", [
         "Basic Operations (Column)",
         "Linear Equation (1st Degree)",
         "Quadratic Equation (2nd Degree)",
-        "System of Equations (2x2)",
-        "System of Equations (3x3)",
         "Differentiation (Derivatives)",
         "Integration (Definite/Indefinite)"
     ])
@@ -737,35 +741,16 @@ with col_in:
     elif mode == "Linear Equation (1st Degree)":
         eq = st.text_input("Equation (e.g., 2x + 3 = 7):", "2x + 3 = 7")
         if st.button("📐 Solve", use_container_width=True):
-            st.session_state.result_html = solver.solve_linear_detailed(eq)
+            st.session_state.result_html = solver.solve_linear(eq)
             st.session_state.iframe_version += 1
             st.session_state.history.append(f"Linear: {eq}")
 
     elif mode == "Quadratic Equation (2nd Degree)":
         eq = st.text_input("Equation (e.g., x^2 + 3x - 4 = 0):", "x^2 + 3x - 4 = 0")
         if st.button("🔢 Solve", use_container_width=True):
-            st.session_state.result_html = solver.solve_quadratic_detailed(eq)
+            st.session_state.result_html = solver.solve_quadratic(eq)
             st.session_state.iframe_version += 1
             st.session_state.history.append(f"Quadratic: {eq}")
-
-    elif mode == "System of Equations (2x2)":
-        st.markdown("Enter two equations:")
-        eq1 = st.text_input("Equation 1 (e.g., 2x + y = 5):", "2x + y = 5")
-        eq2 = st.text_input("Equation 2 (e.g., x - y = 1):", "x - y = 1")
-        if st.button("🔢 Solve System", use_container_width=True):
-            st.session_state.result_html = solver.solve_system_2x2(eq1, eq2)
-            st.session_state.iframe_version += 1
-            st.session_state.history.append(f"System 2x2: {eq1}, {eq2}")
-
-    elif mode == "System of Equations (3x3)":
-        st.markdown("Enter three equations:")
-        eq1 = st.text_input("Equation 1 (e.g., x + y + z = 6):", "x + y + z = 6")
-        eq2 = st.text_input("Equation 2 (e.g., 2x - y + z = 3):", "2x - y + z = 3")
-        eq3 = st.text_input("Equation 3 (e.g., x + 2y - z = 0):", "x + 2y - z = 0")
-        if st.button("🔢 Solve System", use_container_width=True):
-            st.session_state.result_html = solver.solve_system_3x3(eq1, eq2, eq3)
-            st.session_state.iframe_version += 1
-            st.session_state.history.append(f"System 3x3: {eq1}, {eq2}, {eq3}")
 
     elif mode == "Differentiation (Derivatives)":
         func = st.text_input("f(x) =", "x^2 + 3x + 5")
@@ -794,6 +779,7 @@ with col_out:
     st.markdown("### ✨ Step‑by‑Step Solution")
 
     if st.session_state.result_html:
+        # Embed a unique version number to force iframe reload
         full_page = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -847,7 +833,6 @@ with col_out:
         .formula-highlight {{ 
             background: #edf2f7; border: 2px solid #667eea; border-radius: 12px;
             padding: 16px; text-align: center; margin: 12px 0; font-size: 18px;
-            overflow-x: auto;
         }}
         
         .result-box {{ 
@@ -889,7 +874,7 @@ with col_out:
     {st.session_state.result_html}
 </body>
 </html>"""
-        components.html(full_page, height=900, scrolling=True)
+        components.html(full_page, height=800, scrolling=True)
     else:
         st.info("👈 Choose a mode, enter data, and click **Compute** to see the complete step‑by‑step resolution.")
 

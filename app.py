@@ -36,19 +36,334 @@ def step_header(n, title, desc=""):
     if desc:
         st.markdown(desc)
 
+# ================= LONG ARITHMETIC HELPERS (Handwritten Style) =================
+def get_digits(n):
+    return list(map(int, str(abs(n))))
+
+def long_addition_steps(a,b):
+    # returns steps from right to left
+    a_str, b_str = str(abs(a)), str(abs(b))
+    max_len = max(len(a_str), len(b_str))
+    a_str = a_str.zfill(max_len)
+    b_str = b_str.zfill(max_len)
+    carry = 0
+    steps = [] # each: {da, db, carry_in, sum, write, carry_out}
+    for i in range(max_len-1, -1, -1):
+        da = int(a_str[i]); db = int(b_str[i])
+        s = da+db+carry
+        steps.insert(0, {"da":da, "db":db, "carry_in":carry, "sum":s, "write":s%10, "carry_out":s//10})
+        carry = s//10
+    if carry>0:
+        steps.insert(0, {"da":0,"db":0,"carry_in":0,"sum":carry,"write":carry,"carry_out":0})
+    return steps
+
+def render_addition_html(a,b):
+    steps = long_addition_steps(a,b)
+    # Build HTML mimicking handwritten addition with orange carries
+    # Carries row
+    # We'll create monospace table
+    a_str = str(a); b_str = str(b)
+    # For visual, we need carry row above: the carry_out of each step (except last) shown above next left digit
+    # In addition, carry_out becomes carry_in of left neighbor
+    # Show as orange small numbers
+    html = '<div style="font-family: monospace; font-size:32px; line-height:1.1; background:#fff; padding:15px; display:inline-block; border-radius:8px; border:1px solid #ddd">'
+    # Carry row
+    html += '<div style="color:#E67E22; font-size:18px; letter-spacing:8px; text-align:right; padding-right:5px; min-height:22px">'
+    # carries are the carry_in for each position, show if >0
+    for stp in steps:
+        if stp["carry_in"]>0:
+            html += f'<span style="display:inline-block; width:18px">{stp["carry_in"]}</span>'
+        else:
+            html += '<span style="display:inline-block; width:18px">&nbsp;</span>'
+    html += '</div>'
+    html += f'<div style="text-align:right; letter-spacing:8px">{a}</div>'
+    html += f'<div style="text-align:right; letter-spacing:8px; border-bottom:2px solid black; padding-bottom:4px">+ {b}</div>'
+    # Result
+    result = a+b
+    html += f'<div style="text-align:right; letter-spacing:8px; padding-top:4px">{result}</div>'
+    html += '</div>'
+    # Detailed textual steps
+    detail_html = '<div style="margin-top:15px; font-family: sans-serif; font-size:16px">'
+    detail_html += '<b>Step-by-step (right to left):</b><br>'
+    for idx, stp in enumerate(reversed(steps)):
+        pos = len(steps)-idx
+        detail_html += f'Column {pos}: {stp["da"]} + {stp["db"]} + carry {stp["carry_in"]} = {stp["sum"]} → write {stp["write"]}, carry {stp["carry_out"]}<br>'
+    detail_html += '</div>'
+    return html + detail_html
+
+def render_subtraction_html(a,b):
+    # assume a>=b for simplicity, else show negative
+    if a < b:
+        neg = True
+        a,b = b,a
+    else:
+        neg=False
+    a_str = str(a); b_str = str(b).zfill(len(a_str))
+    borrow = 0
+    steps = []
+    result_digits = []
+    for i in range(len(a_str)-1, -1, -1):
+        da = int(a_str[i])
+        db = int(b_str[i]) if i>= len(a_str)-len(b_str) else 0
+        da_eff = da - borrow
+        need_borrow = 1 if da_eff < db else 0
+        if need_borrow:
+            da_eff += 10
+        write = da_eff - db
+        steps.insert(0, {"da":da, "db":db, "borrow_in":borrow, "da_eff":da_eff, "write":write, "borrow_out":need_borrow})
+        result_digits.insert(0, str(write))
+        borrow = need_borrow
+    result = int(''.join(result_digits))
+    html = '<div style="font-family: monospace; font-size:32px; line-height:1.1; background:#fff; padding:15px; display:inline-block; border-radius:8px; border:1px solid #ddd">'
+    # Borrow row (orange)
+    html += '<div style="color:#E67E22; font-size:18px; letter-spacing:8px; text-align:right; min-height:22px">'
+    for stp in steps:
+        html += f'<span style="display:inline-block; width:18px">{stp["borrow_in"] if stp["borrow_in"] else "&nbsp;"}</span>'
+    html += '</div>'
+    html += f'<div style="text-align:right; letter-spacing:8px">{a_str}</div>'
+    html += f'<div style="text-align:right; letter-spacing:8px; border-bottom:2px solid black">- {b_str.lstrip("0") or "0"}</div>'
+    html += f'<div style="text-align:right; letter-spacing:8px; padding-top:4px">{"-" if neg else ""}{result}</div>'
+    html += '</div>'
+    detail = '<div style="margin-top:15px; font-family:sans-serif; font-size:16px"><b>Borrow logic (right to left):</b><br>'
+    for stp in reversed(steps):
+        detail += f'{stp["da"]} - borrow {stp["borrow_in"]} = {stp["da"]-stp["borrow_in"]} ; {stp["da"]-stp["borrow_in"]} < {stp["db"]} ? borrow 10 → {stp["da_eff"]} - {stp["db"]} = {stp["write"]}<br>'
+    detail += '</div>'
+    return html+detail
+
+def long_multiplication_steps(a,b):
+    a = abs(a); b = abs(b)
+    a_digits = list(map(int, str(a)))
+    b_digits = list(map(int, str(b)))[::-1] # right to left
+    partials = []
+    carries_list = [] # list of carry arrays per partial
+    for bd in b_digits:
+        carry=0
+        partial_digits=[]
+        carries=[]
+        for ad in reversed(a_digits):
+            prod = ad*bd + carry
+            partial_digits.insert(0, prod%10)
+            carries.insert(0, carry) # carry used for this digit? Actually carry is from previous, we store new carry for next
+            carry = prod//10
+        if carry>0:
+            partial_digits.insert(0, carry)
+            carries.insert(0, 0)
+        partials.append(int(''.join(map(str,partial_digits))) if partial_digits else 0)
+        carries_list.append(carries)
+    return partials, carries_list, a_digits, b_digits
+
+def render_multiplication_html(a,b):
+    partials, carries_list, a_digits, b_digits = long_multiplication_steps(a,b)
+    b_str = str(b); a_str = str(a)
+    html = '<div style="font-family: monospace; font-size:30px; line-height:1.15; background:#fff; padding:18px; display:inline-block; border-radius:10px; border:1px solid #ddd">'
+    # Show carries for first partial as example like image - orange small numbers on top
+    # We'll show topmost carry row for first partial if exists
+    if carries_list and any(c>0 for c in carries_list[0]):
+        html += '<div style="color:#E67E22; font-size:18px; letter-spacing:8px; text-align:right; min-height:20px">'
+        # align carries over a_digits
+        for c in carries_list[0]:
+            html += f'<span style="display:inline-block; width:18px">{c if c>0 else "&nbsp;"}</span>'
+        html += '</div>'
+    html += f'<div style="text-align:right; letter-spacing:8px">{a_str}</div>'
+    html += f'<div style="text-align:right; letter-spacing:8px; border-bottom:2px solid black">X {b_str}</div>'
+    # Show partials
+    for idx, p in enumerate(partials):
+        shift = ' ' * idx  # actually we need left padding? For right alignment, shift is trailing spaces? We'll use margin-left
+        # In long multiplication, partials are shifted left by idx
+        # For display right-aligned, we add spaces on right? Simpler: show with indentation from left? But we want right aligned with increasing left shift?
+        # Traditional: first partial right aligned, second shifted one to left (one zero at end), etc.
+        # We'll display with &nbsp; on right for shift? Actually easier: display as number with left padding decreasing?
+        # Let's display each partial right-aligned with offset
+        if idx==0:
+            html += f'<div style="text-align:right; letter-spacing:8px; color:#222">{p}</div>'
+        else:
+            # add small orange carry indicator for this partial if needed (like image shows 1 above)
+            if len(carries_list)>idx and any(c>0 for c in carries_list[idx]):
+                html += '<div style="color:#E67E22; font-size:18px; letter-spacing:8px; text-align:right; min-height:20px">'
+                # align over a part
+                for c in carries_list[idx]:
+                    html += f'<span style="display:inline-block; width:18px">{c if c>0 else "&nbsp;"}</span>'
+                html += f'<span style="display:inline-block; width:{idx*18}px"></span></div>'
+            # show + for second onward like image? Use + for second and beyond except first?
+            prefix = '+' if idx==len(partials)-1 and len(partials)>1 else '&nbsp;'
+            # second partial in example had "1" above and "+15"
+            if idx==1 and len(partials)>1:
+                html += f'<div style="text-align:right; letter-spacing:8px; color:#222">{prefix}{p}{"0"* (idx-1) if idx>0 else ""}</div>'
+            else:
+                # For general, multiply partial by 10**idx for value, but display without zeros as image does
+                display_val = str(p) + ("0"*idx if idx>0 and len(str(b))>1 else "")
+                # If we already include shift as zeros, don't double
+                if idx>0:
+                    # partials already are a*digit, we need to show shifted: e.g., 152*5=760, shift 1 -> 7600? Actually 760*10 =7600 but image shows 760 not 7600? In image Ex2, second partial 760 is shown as 760 (with extra space) not 7600, third as 152.
+                    # To match image style (they don't show trailing zero), we show p with offset spaces on left? Let's just show p with left offset via padding-right
+                    html += f'<div style="text-align:right; letter-spacing:8px; color:#222"><span style="margin-right:{idx*8}px">{prefix}{p}</span></div>'
+                else:
+                    html += f'<div style="text-align:right; letter-spacing:8px; color:#222">{display_val}</div>'
+
+    html += '<div style="border-top:2px solid black; margin-top:4px; text-align:right; letter-spacing:8px; padding-top:4px; font-weight:bold">'
+    html += f'{a*b}</div>'
+    html += '</div>'
+
+    # Detailed steps text
+    detail = '<div style="margin-top:15px; font-family:sans-serif; font-size:15px"><b>Detailed multiplication breakdown:</b><br>'
+    for idx, bd in enumerate(b_digits):
+        detail += f'Partial {idx+1}: {a} × {bd} (digit {idx+1} of {b} from right)<br>'
+        carry=0
+        for j, ad in enumerate(reversed(a_digits)):
+            prod = ad*bd + carry
+            detail += f'&nbsp;&nbsp;{ad}×{bd} + carry {carry} = {ad*bd}+{carry}={prod} → write {prod%10}, carry {prod//10}<br>'
+            carry = prod//10
+        if carry:
+            detail += f'&nbsp;&nbsp;Final carry {carry} written at front → partial = {partials[idx]}<br>'
+        detail += f'→ Partial product = {partials[idx]} (shifted {idx} positions = {partials[idx] * (10**idx)})<br><br>'
+    detail += f'<b>Sum of shifted partials:</b> {" + ".join([str(p*(10**i)) for i,p in enumerate(partials)])} = {a*b}'
+    detail += '</div>'
+    return html+detail
+
+def long_division_steps(dividend, divisor):
+    dividend = abs(dividend); divisor = abs(divisor)
+    s_dividend = str(dividend)
+    steps=[]
+    current=0
+    quotient_digits=[]
+    for i,ch in enumerate(s_dividend):
+        current = current*10 + int(ch)
+        q = current // divisor
+        prod = q*divisor
+        rem = current - prod
+        steps.append({"current":current, "q":q, "prod":prod, "rem":rem, "digit_index":i})
+        quotient_digits.append(str(q))
+        current = rem
+    quotient = int(''.join(quotient_digits)) if quotient_digits else 0
+    return steps, quotient
+
+def render_division_html(dividend, divisor):
+    if divisor==0:
+        return '<div style="color:red">Division by zero not allowed</div>'
+    steps, quotient = long_division_steps(dividend, divisor)
+    remainder = steps[-1]["rem"] if steps else 0
+    # Build visual like keyhole division
+    html = '<div style="font-family: monospace; font-size:30px; background:#fff; padding:18px; display:inline-block; border-radius:10px; border:1px solid #ddd">'
+    html += '<div style="display:flex">'
+    # Left side
+    html += '<div style="padding-right:20px; text-align:right">'
+    html += f'<div style="color:black; letter-spacing:4px">{dividend}<span style="display:inline-block; width:30px; border-left:3px solid black; border-bottom:3px solid black; margin-left:10px; padding-left:10px; color:black">{divisor}</span></div>'
+    # Now steps left column under dividend
+    # We need to show the subtraction chain
+    for idx, st in enumerate(steps):
+        # Show -prod in orange and remainder below
+        # For first where current < divisor and q==0 and not first digit? Skip showing?
+        if st["q"]==0 and st["current"] < divisor and idx==0 and len(str(dividend))>1:
+            continue
+        html += f'<div style="color:#E67E22; letter-spacing:4px; text-align:right; margin-top:2px">-{st["prod"]}</div>'
+        html += f'<div style="border-top:2px solid #E67E22; color:#E67E22; margin:2px 0"></div>'
+        # Show next current (which is rem*10 + next digit) as orange, but we show as st["rem"] combined with next digit? Simpler show remainder then next digit brought down as e.g., 15, 06
+        if idx < len(steps)-1:
+            next_current = steps[idx+1]["current"]
+            # Format with leading zero if needed like 06 in image
+            # Show as two digits if original had zero
+            html += f'<div style="color:#E67E22; letter-spacing:4px; text-align:right">{next_current:02d}</div>' if next_current<10 and len(str(dividend))>1 else f'<div style="color:#E67E22; letter-spacing:4px; text-align:right">{next_current}</div>'
+    # Last remainder
+    html += f'<div style="color:#E67E22; letter-spacing:4px; text-align:right; border-top:2px solid #E67E22; margin-top:4px; padding-top:2px">{remainder:02d}</div>'
+    html += '</div>'
+    # Right side quotient
+    html += f'<div style="padding-left:0; margin-left:-20px; padding-top:0"><div style="color:#E67E22; font-size:30px; margin-left:45px; margin-top:40px">{quotient}</div></div>'
+    html += '</div>' # flex
+    html += '</div>'
+
+    # Textual breakdown
+    detail = '<div style="margin-top:15px; font-family:sans-serif; font-size:15px"><b>Long Division Steps (like school):</b><br>'
+    for st in steps:
+        detail += f'Bring down → current = {st["current"]}, {st["current"]} ÷ {divisor} = {st["q"]} (since {st["q"]}×{divisor}={st["prod"]}), remainder {st["current"]}-{st["prod"]}={st["rem"]}<br>'
+    detail += f'<b>Result: {dividend} ÷ {divisor} = {quotient} remainder {remainder}</b><br>Check: {divisor}×{quotient}+{remainder} = {divisor*quotient+remainder}'
+    detail += '</div>'
+    return html+detail
+
 # ================= SIDEBAR =================
 with st.sidebar:
     st.title("🧮 Math Solver Pro")
     st.caption("Detailed step-by-step solver with theory")
     mode = st.radio(
         "Choose Solver:",
-        ["First-Degree Equation", "Second-Degree Equation", "Linear Systems", "Derivative", "Integral"],
+        ["Basic Arithmetic (Long Method)", "First-Degree Equation", "Second-Degree Equation", "Linear Systems", "Derivative", "Integral"],
         index=0
     )
     st.divider()
     st.markdown("**How to write expressions:**")
     st.code("2*x + 3\nx^2 + 3*x + 2\nsin(x) + x**2\n1/(x+1)\nexp(x), sqrt(x), log(x)")
     st.info("All explanations are in English as requested. The solver shows every algebraic manipulation.")
+
+# ================= 0 - BASIC ARITHMETIC (Long Method like image) =================
+if mode == "Basic Arithmetic (Long Method)":
+    st.title("🔢 Basic Arithmetic - Handwritten Long Method")
+    theory_box("Basic Arithmetic Operations - Long Method",
+    r"""
+**Definition:** Basic arithmetic operations are the foundation of all mathematics: addition, subtraction, multiplication, and division.
+
+**1. Addition:** Combining two quantities. Algorithm: Add digits from right to left (units, tens, hundreds), carry over if sum ≥ 10.
+$$ \text{Example: } 15 + 15: 5+5=10 \text{ write 0 carry 1, } 1+1+1=3 \rightarrow 30 $$
+
+**2. Subtraction:** Finding the difference. Algorithm: Subtract right to left, borrow 10 from next left column if top digit < bottom digit.
+
+**3. Multiplication:** Repeated addition. Long method:
+- Multiply top number by each digit of bottom number (right to left), tracking carries (small orange numbers on top like in your image).
+- Each partial product is shifted left by its position.
+- Sum all shifted partials to get final product.
+$$ 15 \times 15: 15×5=75, 15×1=15 \text{ (shifted)}, 75+150=225 $$
+
+**4. Division (Keyhole Method):** As shown in your image (756 ÷ 3):
+- Dividend on left, divisor on right with L-shaped symbol.
+- Take first digits of dividend, divide by divisor to get quotient digit, multiply back, subtract (shown in orange -6, -15...), bring down next digit (15, 06), repeat.
+- Final remainder is last orange number (00 means exact division).
+$$ 756 ÷ 3 = 252 \text{ remainder } 0 \text{ because } 3×252=756 $$
+
+**Why orange numbers?** In the handwritten method, orange (or small) numbers are carries/borrows and intermediate subtractions - they are the thinking steps that are usually erased but we keep visible for learning.
+    """)
+
+    st.subheader("Choose Operation")
+    op = st.selectbox("Operation", ["Addition (+)", "Subtraction (-)", "Multiplication (×) - Like Image Ex1/Ex2", "Division (÷) - Like Image Division"], index=2)
+
+    col_a, col_b = st.columns(2)
+    a_in = col_a.number_input("First Number (A)", value=756, min_value=0, max_value=999999, step=1)
+    b_in = col_b.number_input("Second Number (B)", value=3, min_value=0, max_value=999999, step=1)
+
+    if op == "Multiplication (×) - Like Image Ex1/Ex2":
+        st.markdown("#### Example from your image:")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Ex1: 15 × 15 = 225**")
+            st.markdown(render_multiplication_html(15,15), unsafe_allow_html=True)
+        with c2:
+            st.markdown("**Ex2: 152 × 153 = 23256**")
+            st.markdown(render_multiplication_html(152,153), unsafe_allow_html=True)
+
+    if op == "Division (÷) - Like Image Division":
+        st.markdown("#### Example from your image:")
+        st.markdown("**Ex1: 756 ÷ 3 = 252** (exactly like your screenshot)")
+        st.markdown(render_division_html(756,3), unsafe_allow_html=True)
+
+    st.divider()
+    st.subheader(f"Your Calculation: {a_in} {op} {b_in}")
+
+    if st.button("Calculate with Handwritten Steps", type="primary"):
+        if op == "Addition (+)":
+            st.markdown("### ➕ Addition - Long Method")
+            st.markdown(render_addition_html(a_in, b_in), unsafe_allow_html=True)
+        elif op == "Subtraction (-)":
+            st.markdown("### ➖ Subtraction - Long Method with Borrowing")
+            st.markdown(render_subtraction_html(a_in, b_in), unsafe_allow_html=True)
+        elif op == "Multiplication (×) - Like Image Ex1/Ex2":
+            st.markdown("### ✖️ Multiplication - Long Method (like your image)")
+            st.markdown(render_multiplication_html(a_in, b_in), unsafe_allow_html=True)
+            st.markdown("---")
+            st.markdown("**Algebraic Theory:** Multiplication distributes: $a×b = a×(b_0 + 10 b_1 + 100 b_2...) = a b_0 + 10 a b_1 + ...$ Each partial product is $a × digit$ with carries shown in orange on top (exactly like your Ex1 and Ex2).")
+        elif op == "Division (÷) - Like Image Division":
+            st.markdown("### ➗ Division - Keyhole Long Division (like your image)")
+            st.markdown(render_division_html(a_in, b_in), unsafe_allow_html=True)
+            st.markdown("---")
+            st.markdown("**Algebraic Theory:** Division is inverse of multiplication. We find $q$ such that $dividend = divisor×q + remainder$, $0 ≤ remainder < divisor$. Steps: divide partial dividend, multiply back (orange -6, -15), subtract, bring down next digit (orange 15, 06).")
+
+    st.info("💡 Tip: The orange numbers are the carries (multiplication/addition), borrows (subtraction), and intermediate subtractions (division) - exactly as handwritten in school, matching your screenshot style.")
 
 # ================= 1 - FIRST DEGREE =================
 if mode == "First-Degree Equation":
@@ -139,7 +454,7 @@ where $a \neq 0$ and $a, b, c \in \mathbb{R}$.
                 if solution:
                     sol = solution[0]
                     if poly.degree() == 1:
-                        st.latex("x = \\frac{" + str(-b_std) + "}{" + sp.latex(a_std) + "}")
+                        st.latex(f"x = \\frac{{ {-b_std} }}{{ {sp.latex(a_std)} }}")
                         st.latex(f"x = {sp.latex(sol)}")
                         try:
                             st.latex(f"x \\approx {float(sol):.6f}")
@@ -412,7 +727,7 @@ $$
                 continue
             sum_ax = np.dot(M[i, i+1:n], x_sol[i+1:n])
             x_sol[i] = (M[i, -1] - sum_ax) / M[i,i]
-            st.latex(f"{var_names[i]} = \\frac{{{M[i,-1]:.4f} - {sum_ax:.4f}}}{{{M[i,i]:.4f}}} = {x_sol[i]:.6f}")
+            st.latex(f"{var_names[i]} = \\frac{{ {M[i,-1]:.4f} - {sum_ax:.4f} }}{{ {M[i,i]:.4f} }} = {x_sol[i]:.6f}")
 
         st.success("### ✅ Final Solution:")
         for i, name in enumerate(var_names):
@@ -435,8 +750,8 @@ $$
             Ay = A_mat.copy()
             Ay[:,1] = sp.Matrix(b_np)
             st.latex(f"\\det(A) = {sp.latex(detA)}")
-            st.latex("\\det(A_x) = " + sp.latex(Ax.det()) + ", \\; x = \\frac{\\det(A_x)}{\\det(A)} = " + sp.latex(Ax.det()/detA))
-            st.latex("\\det(A_y) = " + sp.latex(Ay.det()) + ", \\; y = \\frac{\\det(A_y)}{\\det(A)} = " + sp.latex(Ay.det()/detA))
+            st.latex(f"\\det(A_x) = {sp.latex(Ax.det())}, \\; x = \\frac{{\\det(A_x)}}{{\\det(A)}} = {sp.latex(Ax.det()/detA)}")
+            st.latex(f"\\det(A_y) = {sp.latex(Ay.det())}, \\; y = \\frac{{\\det(A_y)}}{{\\det(A)}} = {sp.latex(Ay.det()/detA)}")
 
 # ================= 4 - DERIVATIVE =================
 elif mode == "Derivative":
@@ -503,10 +818,10 @@ if the limit exists.
                 st.markdown(f"**Derivative of term** ${sp.latex(term)}$:")
                 # Explain power rule if applicable
                 if term.is_Pow or (term.is_Mul and any(a.is_Pow for a in term.args)):
-                    st.markdown("- Apply Power Rule / Constant Multiple: $\\frac{d}{d" + var_choice + "} " + sp.latex(term) + " = " + sp.latex(d_term) + "$")
+                    st.markdown(f"- Apply Power Rule / Constant Multiple: $\\frac{{d}}{{d{var_choice}}} {sp.latex(term)} = {sp.latex(d_term)}$")
                 else:
                     # try to detect sin etc
-                    st.latex("\\frac{d}{d" + var_choice + "} \\left[ " + sp.latex(term) + " \\right] = " + sp.latex(d_term))
+                    st.latex(f"\\frac{{d}}{{d{var_choice}}} \\left[ {sp.latex(term)} \\right] = {sp.latex(d_term)}")
                 deriv_terms.append(d_term)
             st.markdown("Now sum all derivatives:")
             st.latex(f"f' = {' + '.join([sp.latex(d) for d in deriv_terms])}")
@@ -520,7 +835,7 @@ if the limit exists.
         f_prime = sp.diff(f_expr, var, order)
         f_prime_simplified = sp.simplify(f_prime)
         st.markdown(f"#### Result after differentiation (order {order}):")
-        st.latex("\\frac{d^{" + str(order) + "}}{d" + var_choice + "^{" + str(order) + "}} f = " + sp.latex(f_prime))
+        st.latex(f"\\frac{{d^{order}}}{{d{var_choice}^{order}}} f = {sp.latex(f_prime)}")
         st.latex(f"\\text{{Simplified: }} {sp.latex(f_prime_simplified)}")
 
         step_header(3, "Simplification and Interpretation",
@@ -611,11 +926,11 @@ elif mode == "Integral":
                 if term.is_Pow or term.is_Symbol or term.is_Number:
                     # power rule
                     if term == var_int:
-                        st.latex("\\int " + sp.latex(term) + " d" + var_int_choice + " = \\int " + var_int_choice + "^1 d" + var_int_choice + " = \\frac{" + var_int_choice + "^2}{2} = " + sp.latex(int_term))
+                        st.latex(f"\\int {sp.latex(term)} d{var_int_choice} = \\int {var_int_choice}^1 d{var_int_choice} = \\frac{{{var_int_choice}^2}}{{2}} = {sp.latex(int_term)}")
                     elif term.is_Pow:
                         base, exp = term.as_base_exp()
                         if base == var_int:
-                            st.latex("\\int " + var_int_choice + "^{" + sp.latex(exp) + "} d" + var_int_choice + " = \\frac{" + var_int_choice + "^{" + sp.latex(exp+1) + "}}{" + sp.latex(exp+1) + "} = " + sp.latex(int_term) + " \\quad \\text{(Power Rule)}")
+                            st.latex(f"\\int {var_int_choice}^{{{sp.latex(exp)}}} d{var_int_choice} = \\frac{{{var_int_choice}^{{{sp.latex(exp+1)}}}}}{{{sp.latex(exp+1)}}} = {sp.latex(int_term)} \\quad \\text{{(Power Rule)}}")
                         else:
                             st.latex(f"\\int {sp.latex(term)} d{var_int_choice} = {sp.latex(int_term)}")
                     else:
@@ -637,7 +952,7 @@ elif mode == "Integral":
                     "Add constant of integration $C$ because derivative of constant is zero.")
         antideriv_simplified = sp.simplify(antideriv)
         st.latex(f"\\int {sp.latex(f_expr)} d{var_int_choice} = {sp.latex(antideriv_simplified)} + C")
-        st.markdown("**Verification by differentiation:** $\\frac{d}{d" + var_int_choice + "} [" + sp.latex(antideriv_simplified) + "] = " + sp.latex(sp.diff(antideriv_simplified, var_int)) + "$ → Should equal original integrand.")
+        st.markdown(f"**Verification by differentiation:** $\\frac{{d}}{{d{var_int_choice}}} [{sp.latex(antideriv_simplified)}] = {sp.latex(sp.diff(antideriv_simplified, var_int))}$ → Should equal original integrand.")
         if sp.simplify(sp.diff(antideriv_simplified, var_int) - f_expr) == 0:
             st.success("✅ Differentiation check passed: derivative of antiderivative equals original integrand.")
 

@@ -450,6 +450,132 @@ public:
         }
         return res;
     }
+
+    // ========== BASIC ARITHMETIC - LONG METHOD (like image) ==========
+    static SolutionResult additionLong(long long a, long long b) {
+        SolutionResult res; res.success=true;
+        std::ostringstream th;
+        th << "THEORY - ADDITION LONG METHOD:\n"
+           << "Addition is combining quantities. Right-to-left column addition.\n"
+           << "If sum of column >=10, write ones digit, carry 1 to next left column (orange small numbers on top).\n"
+           << "Example from image logic: 5+5=10 write 0 carry 1.\n";
+        res.theory=th.str();
+        long long orig_a=a, orig_b=b;
+        std::string sa=std::to_string(a), sb=std::to_string(b);
+        int n=std::max(sa.size(), sb.size());
+        sa = std::string(n-sa.size(),'0')+sa;
+        sb = std::string(n-sb.size(),'0')+sb;
+        int carry=0;
+        std::string result_rev="";
+        for(int i=n-1;i>=0;--i){
+            int da=sa[i]-'0', db=sb[i]-'0';
+            int sum=da+db+carry;
+            SolutionStep s;
+            s.title="Column "+std::to_string(n-i)+" from right";
+            std::ostringstream ds;
+            ds << da << " + " << db << " + carry " << (sum-da-db) << " = " << sum << " -> write " << sum%10 << ", carry " << sum/10;
+            s.description=ds.str();
+            s.latex=ds.str();
+            res.steps.push_back(s);
+            result_rev = char('0'+ sum%10) + result_rev;
+            carry = sum/10;
+        }
+        if(carry) result_rev = char('0'+carry)+result_rev;
+        res.final_answer = std::to_string(orig_a)+" + "+std::to_string(orig_b)+" = "+ result_rev + " (with orange carries on top)";
+        return res;
+    }
+
+    static SolutionResult multiplicationLong(long long a, long long b) {
+        SolutionResult res; res.success=true;
+        std::ostringstream th;
+        th << "THEORY - MULTIPLICATION LONG METHOD (like your image Ex1 15x15 and Ex2 152x153):\n"
+           << "Multiply top number by each digit of bottom from right to left.\n"
+           << "For each digit: multiply digit*digit + carry, write ones, carry tens as small orange number on top (like 2 and 1 1 in your image).\n"
+           << "Partial products are stacked and shifted left.\n"
+           << "Example Ex1: 15x15: 15x5=75 (2 is carry: 5*5=25 write 5 carry 2, 1*5+2=7). Second partial 15x1=15. Sum 75+150=225.\n"
+           << "Example Ex2: 152x153: 152x3=456 (carry 1 1), 152x5=760 (carry 1 2), 152x1=152. Sum 456+7600+15200=23256.\n"
+           << "Orange numbers are the carries.\n";
+        res.theory=th.str();
+
+        long long orig_a=a, orig_b=b;
+        std::string sb=std::to_string(b);
+        std::vector<long long> partials;
+        for(int i=sb.size()-1;i>=0;--i){
+            int digit = sb[i]-'0';
+            long long prod = a*digit;
+            partials.push_back(prod);
+            SolutionStep s;
+            s.title="Partial product for digit "+std::to_string(digit)+" of "+std::to_string(b);
+            std::ostringstream ds;
+            ds << a << " x " << digit << " = " << prod << ". Process: ";
+            // detail digit by digit
+            std::string sa=std::to_string(a);
+            int carry=0;
+            for(int j=sa.size()-1;j>=0;--j){
+                int ad=sa[j]-'0';
+                int p=ad*digit+carry;
+                ds << ad << "x" << digit << "+" << carry << "=" << p << " write " << p%10 << " carry " << p/10 << "; ";
+                carry=p/10;
+            }
+            if(carry) ds << "final carry " << carry << ".";
+            s.description=ds.str();
+            s.latex=std::to_string(prod);
+            res.steps.push_back(s);
+        }
+        // sum
+        long long total=0;
+        for(size_t i=0;i<partials.size();++i) total += partials[i] * (long long)std::pow(10,i);
+        {
+            SolutionStep s;
+            s.title="Sum shifted partials";
+            std::ostringstream ds;
+            for(size_t i=0;i<partials.size();++i){
+                ds << partials[i] << "*10^" << i;
+                if(i+1<partials.size()) ds << " + ";
+            }
+            ds << " = " << total;
+            s.description=ds.str();
+            s.latex=ds.str();
+            res.steps.push_back(s);
+        }
+        res.final_answer = std::to_string(orig_a)+" x "+std::to_string(orig_b)+" = "+std::to_string(total);
+        return res;
+    }
+
+    static SolutionResult divisionLong(long long dividend, long long divisor) {
+        SolutionResult res; res.success=true;
+        std::ostringstream th;
+        th << "THEORY - DIVISION LONG METHOD (Keyhole) like your image 756 | 3 = 252:\n"
+           << "Dividend left, divisor right with L-shaped border.\n"
+           << "Take first digits of dividend, divide by divisor: q = current // divisor, prod = q*divisor, remainder = current - prod.\n"
+           << "Show -prod in orange (-6, -15...), subtract, bring down next digit (15, 06 in image), repeat.\n"
+           << "Final orange 00 means exact division remainder 0.\n"
+           << "Check: divisor*q + remainder = dividend.\n";
+        res.theory=th.str();
+
+        if(divisor==0){ res.success=false; res.final_answer="Division by zero"; return res; }
+        std::string sdiv = std::to_string(dividend);
+        long long current=0;
+        std::string quotient_str="";
+        for(size_t i=0;i<sdiv.size();++i){
+            current = current*10 + (sdiv[i]-'0');
+            long long q = current / divisor;
+            long long prod = q*divisor;
+            long long rem = current - prod;
+            SolutionStep s;
+            s.title="Step bring down digit "+std::to_string(i+1)+": current="+std::to_string(current);
+            std::ostringstream ds;
+            ds << current << " ÷ " << divisor << " = " << q << " (since " << q << "x" << divisor << "=" << prod << "), remainder " << current << "-" << prod << "=" << rem;
+            s.description=ds.str();
+            s.latex=ds.str();
+            res.steps.push_back(s);
+            quotient_str += char('0'+q);
+            current = rem;
+        }
+        long long quotient = quotient_str.empty()?0:std::stoll(quotient_str);
+        res.final_answer = std::to_string(dividend)+" ÷ "+std::to_string(divisor)+" = "+std::to_string(quotient)+" remainder "+std::to_string(current)+" (like image 756|3=252)";
+        return res;
+    }
 };
 
 // Example main for testing (optional)

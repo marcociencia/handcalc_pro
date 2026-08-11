@@ -1,4 +1,4 @@
-# app.py – Fully native rendering, guaranteed to show step‑by‑step
+# app.py – Clean & Verified Version (native rendering, no iframe)
 import streamlit as st
 import math
 import sympy as sp
@@ -54,8 +54,8 @@ class MathSolver:
         except Exception:
             return None
 
-    # ---------- Basic Column Arithmetic (return blocks) ----------
-    def _manual_add_blocks(self, n1, n2):
+    # ---------- Basic Column Arithmetic ----------
+    def addition_blocks(self, n1, n2):
         s1, s2 = str(abs(n1)), str(abs(n2))
         max_len = max(len(s1), len(s2))
         result = n1 + n2
@@ -76,17 +76,14 @@ class MathSolver:
         lines.append("─" * width)
         lines.append(result_str.rjust(width))
         display = "\n".join(lines)
-        blocks = [
-            {"type": "html", "content": f"""
-                <div class="step-box">
-                    <strong>➕ Column Addition (Step by Step)</strong><br><br>
-                    <pre class="manual-display">{display}</pre>
-                    <div class="result-box">🎯 <strong>Result: {n1} + {n2} = {result}</strong></div>
-                </div>"""}
-        ]
-        return blocks
+        return [{"type": "html", "content": f"""
+            <div class="step-box">
+                <strong>➕ Column Addition (Step by Step)</strong><br><br>
+                <pre class="manual-display">{display}</pre>
+                <div class="result-box">🎯 <strong>Result: {n1} + {n2} = {result}</strong></div>
+            </div>"""}]
 
-    def _manual_sub_blocks(self, n1, n2):
+    def subtraction_blocks(self, n1, n2):
         result = n1 - n2
         s1, s2 = str(abs(n1)), str(abs(n2))
         width = max(len(s1), len(s2) + 2, len(str(result))) + 1
@@ -99,7 +96,7 @@ class MathSolver:
                 <div class="result-box">🎯 <strong>Result: {n1} - {n2} = {result}</strong></div>
             </div>"""}]
 
-    def _manual_mul_blocks(self, n1, n2):
+    def multiplication_blocks(self, n1, n2):
         s1, s2 = str(abs(n1)), str(abs(n2))
         result = n1 * n2
         partials = [int(s1) * int(d) * (10 ** i) for i, d in enumerate(reversed(s2))]
@@ -120,7 +117,7 @@ class MathSolver:
                 <div class="result-box">🎯 <strong>Result: {n1} × {n2} = {result}</strong></div>
             </div>"""}]
 
-    def _manual_div_blocks(self, n1, n2):
+    def division_blocks(self, n1, n2):
         if n2 == 0:
             return [{"type": "html", "content": "<div class='step-box'>❌ Division by zero.</div>"}]
         quotient = n1 // n2
@@ -137,8 +134,8 @@ class MathSolver:
                 <div class="result-box">🎯 <strong>Result: {n1} ÷ {n2} = {quotient} (Rem {remainder}) | Decimal: {decimal_res:.4f}</strong></div>
             </div>"""}]
 
-    # ---------- Algebra (return blocks) ----------
-    def _solve_linear_blocks(self, eq_str):
+    # ---------- Algebra ----------
+    def linear_blocks(self, eq_str):
         try:
             if '=' not in eq_str:
                 return [{"type": "html", "content": "<div class='step-box'>❌ Use an equation with '='.</div>"}]
@@ -174,7 +171,7 @@ class MathSolver:
         except Exception as e:
             return [{"type": "html", "content": f"<div class='step-box'>❌ Error: {str(e)}</div>"}]
 
-    def _solve_quadratic_blocks(self, func_str):
+    def quadratic_blocks(self, func_str):
         try:
             if '=' in func_str:
                 left_str, right_str = func_str.split('=')
@@ -219,8 +216,8 @@ class MathSolver:
         except Exception as e:
             return [{"type": "html", "content": f"<div class='step-box'>❌ Error: {str(e)}</div>"}]
 
-    # ---------- Calculus (return blocks) ----------
-    def _differentiate_blocks(self, func_str, var='x', eval_pt=None):
+    # ---------- Calculus ----------
+    def differentiate_blocks(self, func_str, var='x', eval_pt=None):
         try:
             expr = self.parse_func(func_str)
             if expr is None:
@@ -252,7 +249,7 @@ class MathSolver:
         except Exception as e:
             return [{"type": "html", "content": f"<div class='step-box'>❌ Error: {str(e)}</div>"}]
 
-    def _integrate_blocks(self, func_str, var='x', lower=None, upper=None):
+    def integrate_blocks(self, func_str, var='x', lower=None, upper=None):
         try:
             expr = self.parse_func(func_str)
             if expr is None:
@@ -333,26 +330,26 @@ with col_in:
         n2 = st.number_input("Second number:", value=12, step=1, format="%d")
         if st.button("🧮 Compute", use_container_width=True):
             if op == "Addition (+)":
-                blocks = solver._manual_add_blocks(int(n1), int(n2))
+                blocks = solver.addition_blocks(int(n1), int(n2))
             elif op == "Subtraction (-)":
-                blocks = solver._manual_sub_blocks(int(n1), int(n2))
+                blocks = solver.subtraction_blocks(int(n1), int(n2))
             elif op == "Multiplication (×)":
-                blocks = solver._manual_mul_blocks(int(n1), int(n2))
+                blocks = solver.multiplication_blocks(int(n1), int(n2))
             else:
-                blocks = solver._manual_div_blocks(int(n1), int(n2))
+                blocks = solver.division_blocks(int(n1), int(n2))
             st.session_state.output_blocks = blocks
             st.session_state.history.append(f"{n1} {op[0]} {n2}")
 
     elif mode == "Linear Equation (1st Degree)":
         eq = st.text_input("Equation (e.g., 2x + 3 = 7):", "2x + 3 = 7")
         if st.button("📐 Solve", use_container_width=True):
-            st.session_state.output_blocks = solver._solve_linear_blocks(eq)
+            st.session_state.output_blocks = solver.linear_blocks(eq)
             st.session_state.history.append(f"Linear: {eq}")
 
     elif mode == "Quadratic Equation (2nd Degree)":
         eq = st.text_input("Equation (e.g., x^2 + 3x - 4 = 0):", "x^2 + 3x - 4 = 0")
         if st.button("🔢 Solve", use_container_width=True):
-            st.session_state.output_blocks = solver._solve_quadratic_blocks(eq)
+            st.session_state.output_blocks = solver.quadratic_blocks(eq)
             st.session_state.history.append(f"Quadratic: {eq}")
 
     elif mode == "Differentiation (Derivatives)":
@@ -360,7 +357,7 @@ with col_in:
         var = st.selectbox("Variable:", ["x", "y", "z"])
         eval_pt = st.text_input("Evaluate at point (optional):", "")
         if st.button("📈 Differentiate", use_container_width=True):
-            st.session_state.output_blocks = solver._differentiate_blocks(func, var, eval_pt)
+            st.session_state.output_blocks = solver.differentiate_blocks(func, var, eval_pt)
             st.session_state.history.append(f"Diff: f({var}) = {func}")
 
     elif mode == "Integration (Definite/Indefinite)":
@@ -373,7 +370,7 @@ with col_in:
             with c1: low_bnd = st.text_input("Lower limit:", "0")
             with c2: upp_bnd = st.text_input("Upper limit:", "1")
         if st.button("📊 Integrate", use_container_width=True):
-            st.session_state.output_blocks = solver._integrate_blocks(func, var, low_bnd, upp_bnd)
+            st.session_state.output_blocks = solver.integrate_blocks(func, var, low_bnd, upp_bnd)
             st.session_state.history.append(f"Integral: f({var}) = {func}")
 
 with col_out:

@@ -139,7 +139,7 @@ where $a \neq 0$ and $a, b, c \in \mathbb{R}$.
                 if solution:
                     sol = solution[0]
                     if poly.degree() == 1:
-                        st.latex(f"x = \\frac{{ {-b_std} }}{{ {sp.latex(a_std)} }}")
+                        st.latex("x = \\frac{" + str(-b_std) + "}{" + sp.latex(a_std) + "}")
                         st.latex(f"x = {sp.latex(sol)}")
                         try:
                             st.latex(f"x \\approx {float(sol):.6f}")
@@ -250,8 +250,13 @@ $$ x = \frac{-b \pm \sqrt{\Delta}}{2a} = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a} $$
         step_header(3, "Apply Quadratic Formula (Bhaskara)",
                     "Formula comes from completing the square for general quadratic:")
         st.latex(r"x = \frac{-b \pm \sqrt{\Delta}}{2a}")
-        st.latex(f"x = \\frac{{ -({sp.latex(b_sym)}) \\pm \\sqrt{{{sp.latex(delta_simplified)}}}}}{{2 \\cdot {sp.latex(a_sym)}}}}")
-        st.latex(f"x = \\frac{{{sp.latex(-b_sym)} \\pm \\sqrt{{{sp.latex(delta_simplified)}}}}{{{sp.latex(2*a_sym)}}}")
+        latex_b = sp.latex(b_sym)
+        latex_delta = sp.latex(delta_simplified)
+        latex_a = sp.latex(a_sym)
+        latex_2a = sp.latex(2*a_sym)
+        latex_minus_b = sp.latex(-b_sym)
+        st.latex("x = \\frac{ -(" + latex_b + ") \\pm \\sqrt{" + latex_delta + "}}{2 \\cdot " + latex_a + "}")
+        st.latex("x = \\frac{" + latex_minus_b + " \\pm \\sqrt{" + latex_delta + "}}{" + latex_2a + "}")
 
         step_header(4, "Compute the Two Roots Separately",
                     "We evaluate both plus and minus branches.")
@@ -265,8 +270,8 @@ $$ x = \frac{-b \pm \sqrt{\Delta}}{2a} = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a} $$
             sqrt_delta = sp.sqrt(delta_simplified)
             x1_form = (-b_sym + sqrt_delta) / (2*a_sym)
             x2_form = (-b_sym - sqrt_delta) / (2*a_sym)
-            st.latex(f"x_1 = \\frac{{-{sp.latex(b_sym)} + \\sqrt{{{sp.latex(delta_simplified)}}}}}{{ {sp.latex(2*a_sym)} }} = {sp.latex(sp.simplify(x1_form))}")
-            st.latex(f"x_2 = \\frac{{-{sp.latex(b_sym)} - \\sqrt{{{sp.latex(delta_simplified)}}}}}{{ {sp.latex(2*a_sym)} }} = {sp.latex(sp.simplify(x2_form))}")
+            st.latex("x_1 = \\frac{" + latex_minus_b + " + \\sqrt{" + latex_delta + "}}{" + latex_2a + "} = " + sp.latex(sp.simplify(x1_form)))
+            st.latex("x_2 = \\frac{" + latex_minus_b + " - \\sqrt{" + latex_delta + "}}{" + latex_2a + "} = " + sp.latex(sp.simplify(x2_form)))
 
         step_header(6, "Factorization and Vieta Verification",
                     "If $r_1, r_2$ are roots, then $a x^2 + b x + c = a(x - r_1)(x - r_2)$")
@@ -407,7 +412,7 @@ $$
                 continue
             sum_ax = np.dot(M[i, i+1:n], x_sol[i+1:n])
             x_sol[i] = (M[i, -1] - sum_ax) / M[i,i]
-            st.latex(f"{var_names[i]} = \\frac{{ {M[i,-1]:.4f} - {sum_ax:.4f} }}{{ {M[i,i]:.4f} }} = {x_sol[i]:.6f}")
+            st.latex(f"{var_names[i]} = \\frac{{{M[i,-1]:.4f} - {sum_ax:.4f}}}{{{M[i,i]:.4f}}} = {x_sol[i]:.6f}")
 
         st.success("### ✅ Final Solution:")
         for i, name in enumerate(var_names):
@@ -430,8 +435,8 @@ $$
             Ay = A_mat.copy()
             Ay[:,1] = sp.Matrix(b_np)
             st.latex(f"\\det(A) = {sp.latex(detA)}")
-            st.latex(f"\\det(A_x) = {sp.latex(Ax.det())}, \\; x = \\frac{{\\det(A_x)}}{{\\det(A)}} = {sp.latex(Ax.det()/detA)}")
-            st.latex(f"\\det(A_y) = {sp.latex(Ay.det())}, \\; y = \\frac{{\\det(A_y)}}{{\\det(A)}} = {sp.latex(Ay.det()/detA)}")
+            st.latex("\\det(A_x) = " + sp.latex(Ax.det()) + ", \\; x = \\frac{\\det(A_x)}{\\det(A)} = " + sp.latex(Ax.det()/detA))
+            st.latex("\\det(A_y) = " + sp.latex(Ay.det()) + ", \\; y = \\frac{\\det(A_y)}{\\det(A)} = " + sp.latex(Ay.det()/detA))
 
 # ================= 4 - DERIVATIVE =================
 elif mode == "Derivative":
@@ -498,10 +503,10 @@ if the limit exists.
                 st.markdown(f"**Derivative of term** ${sp.latex(term)}$:")
                 # Explain power rule if applicable
                 if term.is_Pow or (term.is_Mul and any(a.is_Pow for a in term.args)):
-                    st.markdown(f"- Apply Power Rule / Constant Multiple: $\\frac{{d}}{{d{var_choice}}} {sp.latex(term)} = {sp.latex(d_term)}$")
+                    st.markdown("- Apply Power Rule / Constant Multiple: $\\frac{d}{d" + var_choice + "} " + sp.latex(term) + " = " + sp.latex(d_term) + "$")
                 else:
                     # try to detect sin etc
-                    st.latex(f"\\frac{{d}}{{d{var_choice}}} \\left[ {sp.latex(term)} \\right] = {sp.latex(d_term)}")
+                    st.latex("\\frac{d}{d" + var_choice + "} \\left[ " + sp.latex(term) + " \\right] = " + sp.latex(d_term))
                 deriv_terms.append(d_term)
             st.markdown("Now sum all derivatives:")
             st.latex(f"f' = {' + '.join([sp.latex(d) for d in deriv_terms])}")
@@ -515,7 +520,7 @@ if the limit exists.
         f_prime = sp.diff(f_expr, var, order)
         f_prime_simplified = sp.simplify(f_prime)
         st.markdown(f"#### Result after differentiation (order {order}):")
-        st.latex(f"\\frac{{d^{order}}}{{d{var_choice}^{order}}} f = {sp.latex(f_prime)}")
+        st.latex("\\frac{d^{" + str(order) + "}}{d" + var_choice + "^{" + str(order) + "}} f = " + sp.latex(f_prime))
         st.latex(f"\\text{{Simplified: }} {sp.latex(f_prime_simplified)}")
 
         step_header(3, "Simplification and Interpretation",
@@ -606,11 +611,11 @@ elif mode == "Integral":
                 if term.is_Pow or term.is_Symbol or term.is_Number:
                     # power rule
                     if term == var_int:
-                        st.latex(f"\\int {sp.latex(term)} d{var_int_choice} = \\int {var_int_choice}^1 d{var_int_choice} = \\frac{{{var_int_choice}^2}}{{2}} = {sp.latex(int_term)}")
+                        st.latex("\\int " + sp.latex(term) + " d" + var_int_choice + " = \\int " + var_int_choice + "^1 d" + var_int_choice + " = \\frac{" + var_int_choice + "^2}{2} = " + sp.latex(int_term))
                     elif term.is_Pow:
                         base, exp = term.as_base_exp()
                         if base == var_int:
-                            st.latex(f"\\int {var_int_choice}^{{{sp.latex(exp)}}} d{var_int_choice} = \\frac{{{var_int_choice}^{{{sp.latex(exp+1)}}}}}{{{sp.latex(exp+1)}}} = {sp.latex(int_term)} \\quad \\text{{(Power Rule)}}")
+                            st.latex("\\int " + var_int_choice + "^{" + sp.latex(exp) + "} d" + var_int_choice + " = \\frac{" + var_int_choice + "^{" + sp.latex(exp+1) + "}}{" + sp.latex(exp+1) + "} = " + sp.latex(int_term) + " \\quad \\text{(Power Rule)}")
                         else:
                             st.latex(f"\\int {sp.latex(term)} d{var_int_choice} = {sp.latex(int_term)}")
                     else:
@@ -632,7 +637,7 @@ elif mode == "Integral":
                     "Add constant of integration $C$ because derivative of constant is zero.")
         antideriv_simplified = sp.simplify(antideriv)
         st.latex(f"\\int {sp.latex(f_expr)} d{var_int_choice} = {sp.latex(antideriv_simplified)} + C")
-        st.markdown(f"**Verification by differentiation:** $\\frac{{d}}{{d{var_int_choice}}} [{sp.latex(antideriv_simplified)}] = {sp.latex(sp.diff(antideriv_simplified, var_int))}$ → Should equal original integrand.")
+        st.markdown("**Verification by differentiation:** $\\frac{d}{d" + var_int_choice + "} [" + sp.latex(antideriv_simplified) + "] = " + sp.latex(sp.diff(antideriv_simplified, var_int)) + "$ → Should equal original integrand.")
         if sp.simplify(sp.diff(antideriv_simplified, var_int) - f_expr) == 0:
             st.success("✅ Differentiation check passed: derivative of antiderivative equals original integrand.")
 

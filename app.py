@@ -1,4 +1,3 @@
-# app.py – Final working version with forced iframe refresh (no key argument)
 import streamlit as st
 import streamlit.components.v1 as components
 import math
@@ -140,28 +139,41 @@ class MathSolver:
                 return "<div class='step-box'>⚠️ Not a linear equation (a = 0).</div>"
             x_sol = -b / a
             latex_sol = latex(sp.nsimplify(x_sol))
+
             return f"""
             <div class="theory-box">
-                <div class="theory-title">📚 Linear Equation (1st Degree)</div>
-                <p>Standard form: $ax + b = 0$ → $x = -b/a$</p>
+                <div class="theory-title">📚 Função Linear (1º Grau)</div>
+                <p>Definição: $f(x) = ax + b$</p>
             </div>
             <div class="step-box">
-                <strong>📝 Resolution:</strong><br>
-                <div class="formula-highlight">$${latex(expr)} = 0$$</div>
-                <p>Identifying: $a = {a},\\ b = {b}$<br>
-                $$x = \\frac{{-{b}}}{{{a}}} = {latex_sol}$$</p>
-                <div class="result-box">🎯 <strong>Solution: $x = {latex_sol}$</strong></div>
+                <strong style="color:#4c51bf;">📝 Exemplo: Resolver $f(x) = {latex(left_expr)} = {latex(right_expr)}$</strong><br><br>
+                <table style="width:100%; font-size: 16px; border-collapse: collapse;">
+                    <tr><td style="padding: 12px; width: 45%; vertical-align: middle; color:#4a5568;">Passo 1: Igualar a zero</td>
+                        <td style="padding: 12px; vertical-align: middle;">$${latex(expr)} = 0$$</td></tr>
+                    <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">Passo 2: Isolar o termo com x</td>
+                        <td style="padding: 12px; vertical-align: middle;">$${latex(a*self.x)} = {latex(-b)}$$</td></tr>
+                    <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">Passo 3: Resolver para x</td>
+                        <td style="padding: 12px; vertical-align: middle;">$$x = \\frac{{{latex(-b)}}}{{{latex(a)}}} = {latex_sol}$$</td></tr>
+                </table>
+                <div class="result-box">🎯 <strong>Resultado: $x = {latex_sol}$</strong></div>
             </div>"""
         except Exception as e:
             return f"<div class='step-box'>❌ Error: {str(e)}</div>"
 
     def solve_quadratic(self, func_str):
         try:
+            is_eq = False
+            left_expr = None
+            right_expr = None
             if '=' in func_str:
+                is_eq = True
                 left_str, right_str = func_str.split('=')
-                expr = expand(self.parse_func(left_str) - self.parse_func(right_str))
+                left_expr = self.parse_func(left_str)
+                right_expr = self.parse_func(right_str)
+                expr = expand(left_expr - right_expr)
             else:
                 expr = expand(self.parse_func(func_str))
+            
             if expr is None:
                 return "<div class='step-box'>❌ Invalid expression.</div>"
             poly = sp.Poly(expr, self.x)
@@ -175,29 +187,54 @@ class MathSolver:
                 a = coeffs[0]
             if a == 0:
                 return "<div class='step-box'>⚠️ Not quadratic (a = 0).</div>"
+            
             disc = b**2 - 4*a*c
+            delta_calc = f"({latex(b)})^2 - 4 \\cdot ({latex(a)}) \\cdot ({latex(c)})"
+            
+            prob_str = f"{latex(left_expr)} = {latex(right_expr)}" if is_eq else f"{latex(expr)} = 0"
+
             base = f"""
             <div class="theory-box">
-                <div class="theory-title">📚 Quadratic Equation (Bhaskara)</div>
-                <p>$ax^2+bx+c=0$, $\\Delta = b^2-4ac$</p>
+                <div class="theory-title">📚 Função Quadrática (2º Grau)</div>
+                <p>Definição: $f(x) = ax^2 + bx + c$</p>
             </div>
             <div class="step-box">
-                <strong>📝 Resolution:</strong><br>
-                <div class="formula-highlight">$${latex(expr)} = 0$$</div>
-                <p>$\\Delta = {disc}$</p>"""
+                <strong style="color:#4c51bf;">📝 Exemplo: Resolver $f(x) \\Rightarrow {prob_str}$</strong><br><br>
+                <table style="width:100%; font-size: 16px; border-collapse: collapse;">
+                    <tr><td style="padding: 12px; width: 45%; vertical-align: middle; color:#4a5568;">Passo 1: Identificar coeficientes</td>
+                        <td style="padding: 12px; vertical-align: middle;">$a = {latex(a)},\\; b = {latex(b)},\\; c = {latex(c)}$</td></tr>
+                    <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">Passo 2: Calcular o Delta ($\\Delta$)</td>
+                        <td style="padding: 12px; vertical-align: middle;">$\\Delta = b^2 - 4ac \\rightarrow \\Delta = {delta_calc}$<br>$\\Delta = {latex(disc)}$</td></tr>
+                    <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">Passo 3: Bhaskara</td>
+                        <td style="padding: 12px; vertical-align: middle;">$$x = \\frac{{-b \\pm \\sqrt{{\\Delta}}}}{{2a}}$$</td></tr>
+            """
             if disc >= 0:
-                sqrt_disc = math.sqrt(disc)
-                x1 = (-b + sqrt_disc) / (2*a)
-                x2 = (-b - sqrt_disc) / (2*a)
+                sqrt_disc = math.sqrt(float(disc))
+                sqrt_str = str(int(sqrt_disc)) if sqrt_disc.is_integer() else f"\\sqrt{{{latex(disc)}}}"
+                x1 = (-b + sp.sqrt(disc)) / (2*a)
+                x2 = (-b - sp.sqrt(disc)) / (2*a)
                 base += f"""
-                <p>$x_1 = {latex(sp.nsimplify(x1))}$, $x_2 = {latex(sp.nsimplify(x2))}$</p>
-                <div class="result-box">🎯 <strong>Roots: $x_1 = {latex(sp.nsimplify(x1))},\\; x_2 = {latex(sp.nsimplify(x2))}$</strong></div>"""
+                    <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">Passo 4: Substituir valores</td>
+                        <td style="padding: 12px; vertical-align: middle;">$$x = \\frac{{-({latex(b)}) \\pm \\sqrt{{{latex(disc)}}}}}{{2 \\cdot ({latex(a)})}} \\rightarrow x = \\frac{{{-latex(b)} \\pm {sqrt_str}}}{{{latex(2*a)}}}$$</td></tr>
+                    <tr><td style="padding: 12px; vertical-align: top; color:#4a5568;">Passo 5: Encontrar raízes</td>
+                        <td style="padding: 12px; vertical-align: top;">
+                            <div style="display: flex; flex-direction: column; gap: 8px;">
+                                <div>$x' = \\frac{{{-latex(b)} - {sqrt_str}}}{{{latex(2*a)}}} = {latex(sp.nsimplify(x2))}$</div>
+                                <div>$x'' = \\frac{{{-latex(b)} + {sqrt_str}}}{{{latex(2*a)}}} = {latex(sp.nsimplify(x1))}$</div>
+                            </div>
+                        </td></tr>
+                </table>
+                <div class="result-box">🎯 <strong>Raízes: $x' = {latex(sp.nsimplify(x2))};\\; x'' = {latex(sp.nsimplify(x1))}$</strong></div>
+                """
             else:
-                real_p = -b / (2*a)
-                imag_p = math.sqrt(-disc) / (2*a)
+                real_p = float(-b / (2*a))
+                imag_p = float(math.sqrt(float(-disc)) / (2*a))
                 base += f"""
-                <p>Complex roots: $x = {real_p:.4f} \\pm {imag_p:.4f}i$</p>
-                <div class="result-box">🎯 <strong>Complex roots</strong></div>"""
+                    <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">Passo 4: Substituir valores</td>
+                        <td style="padding: 12px; vertical-align: middle;">$$x = \\frac{{-({latex(b)}) \\pm \\sqrt{{{latex(disc)}}}}}{{2 \\cdot ({latex(a)})}}$$</td></tr>
+                </table>
+                <div class="result-box">🎯 <strong>Raízes Complexas: $x \\approx {real_p:.4f} \\pm {imag_p:.4f}i$</strong></div>
+                """
             base += "</div>"
             return base
         except Exception as e:
@@ -212,29 +249,34 @@ class MathSolver:
             sym_var = Symbol(var)
             df = diff(expr, sym_var)
             simplified_df = simplify(df)
+
             html = f"""
             <div class="theory-box">
-                <div class="theory-title">📚 Differentiation Rules</div>
-                <p>Power, chain, sum, product rules applied.</p>
+                <div class="theory-title">📚 Exemplo 1: Derivada (Regra da Cadeia e Potência)</div>
             </div>
             <div class="step-box">
-                <strong>📝 Derivative:</strong><br>
-                <div class="formula-highlight">$$f({var}) = {latex(expr)}$$</div>
-                <p>$$f'({var}) = {latex(df)}$$</p>
-                <p>Simplified: $$f'({var}) = {latex(simplified_df)}$$</p>"""
+                <table style="width:100%; font-size: 16px; border-collapse: collapse;">
+                    <tr><td style="padding: 12px; width: 35%; vertical-align: middle; color:#4a5568;">Regras:</td>
+                        <td style="padding: 12px; vertical-align: middle; color:#718096;">Regra da Cadeia, Regra da Potência, Soma</td></tr>
+                    <tr><td colspan="2"><hr style="border: 0; border-top: 1px solid #edf2f7; margin: 5px 0;"></td></tr>
+                    <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">1. Identificação:</td>
+                        <td style="padding: 12px; vertical-align: middle;">$$f({var}) = {latex(expr)}$$</td></tr>
+                    <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">2. Derivada:</td>
+                        <td style="padding: 12px; vertical-align: middle;">$$f'({var}) = {latex(simplified_df)}$$</td></tr>
+            """
             if eval_pt and str(eval_pt).strip():
                 try:
                     pt = parse_expr(str(eval_pt).replace('^', '**'))
                     val = simplified_df.subs(sym_var, pt)
-                    html += f"<p>At $x = {latex(pt)}$: $f'({latex(pt)}) = {latex(val)}$"
-                    if val.is_number and not val.is_Integer:
-                        html += f" ≈ {float(val):.4f}</p>"
-                    else:
-                        html += "</p>"
+                    html += f"""
+                    <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">3. Valor em {var}={latex(pt)}:</td>
+                        <td style="padding: 12px; vertical-align: middle;">$$f'({latex(pt)}) = {latex(val)}$$</td></tr>
+                    """
                 except Exception:
-                    html += "<p><i>Could not evaluate at that point.</i></p>"
+                    html += "<tr><td colspan='2' style='padding: 12px;'><i>Could not evaluate at that point.</i></td></tr>"
             html += f"""
-                <div class="result-box">🎯 $$\\boxed{{f'({var}) = {latex(simplified_df)}}}$$</div>
+                </table>
+                <div class="result-box">🎯 <strong>Resultado: $f'({var}) = {latex(simplified_df)}$</strong></div>
             </div>"""
             return html
         except Exception as e:
@@ -248,16 +290,18 @@ class MathSolver:
             sym_var = Symbol(var)
             primitive = integrate(expr, sym_var)
             simplified_prim = simplify(primitive)
+
+            is_definite = lower and upper and str(lower).strip() and str(upper).strip()
+
             html = f"""
             <div class="theory-box">
-                <div class="theory-title">📚 Integration Rules</div>
-                <p>Term‑by‑term antiderivative.</p>
+                <div class="theory-title">📚 Exemplo 2: Integral {'Definida' if is_definite else 'Indefinida'}</div>
             </div>
             <div class="step-box">
-                <strong>📝 Integral:</strong><br>
-                <div class="formula-highlight">$$\\int \\left({latex(expr)}\\right) \\, d{var}$$</div>
-                <p>Antiderivative: $$F({var}) = {latex(simplified_prim)}$$</p>"""
-            if lower and upper and str(lower).strip() and str(upper).strip():
+                <table style="width:100%; font-size: 16px; border-collapse: collapse;">
+            """
+
+            if is_definite:
                 try:
                     a = parse_expr(str(lower).replace('^', '**'))
                     b = parse_expr(str(upper).replace('^', '**'))
@@ -265,14 +309,34 @@ class MathSolver:
                     Fa = simplified_prim.subs(sym_var, a)
                     def_res = simplify(Fb - Fa)
                     html += f"""
-                    <p>Definite integral from ${latex(a)}$ to ${latex(b)}$:<br>
-                    $$\\int_{{{latex(a)}}}^{{{latex(b)}}} \\left({latex(expr)}\\right) \\, d{var} = {latex(def_res)}$$</p>
-                    <div class="result-box">🎯 $$\\boxed{{= {latex(def_res)}}}$$</div>"""
+                        <tr><td style="padding: 12px; width: 35%; vertical-align: middle; color:#4a5568;">Regras:</td>
+                            <td style="padding: 12px; vertical-align: middle; color:#718096;">Substituição (se aplicável), TFC</td></tr>
+                        <tr><td colspan="2"><hr style="border: 0; border-top: 1px solid #edf2f7; margin: 5px 0;"></td></tr>
+                        <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">Problema:</td>
+                            <td style="padding: 12px; vertical-align: middle;">$$\\int_{{{latex(a)}}}^{{{latex(b)}}} \\left({latex(expr)}\\right) \\, d{var}$$</td></tr>
+                        <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">1. Antiderivada:</td>
+                            <td style="padding: 12px; vertical-align: middle;">$$F({var}) = {latex(simplified_prim)}$$</td></tr>
+                        <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">2. Aplicação TFC:</td>
+                            <td style="padding: 12px; vertical-align: middle;">$$F({latex(b)}) - F({latex(a)})$$</td></tr>
+                        <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">3. Resultado:</td>
+                            <td style="padding: 12px; vertical-align: middle;">$${latex(def_res)}$$</td></tr>
+                    </table>
+                    <div class="result-box">🎯 <strong>Resultado: ${latex(def_res)}$</strong></div>
+                    """
                 except Exception:
-                    html += "<p><i>Invalid limits.</i></p>"
+                    html += "<tr><td colspan='2' style='padding: 12px;'><i>Invalid limits.</i></td></tr></table></div>"
             else:
                 html += f"""
-                <div class="result-box">🎯 $$\\boxed{{\\int \\left({latex(expr)}\\right) \\, d{var} = {latex(simplified_prim)} + C}}$$</div>"""
+                        <tr><td style="padding: 12px; width: 35%; vertical-align: middle; color:#4a5568;">Regras:</td>
+                            <td style="padding: 12px; vertical-align: middle; color:#718096;">Integração polinomial / básica</td></tr>
+                        <tr><td colspan="2"><hr style="border: 0; border-top: 1px solid #edf2f7; margin: 5px 0;"></td></tr>
+                        <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">Problema:</td>
+                            <td style="padding: 12px; vertical-align: middle;">$$\\int \\left({latex(expr)}\\right) \\, d{var}$$</td></tr>
+                        <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">1. Integral:</td>
+                            <td style="padding: 12px; vertical-align: middle;">$$ {latex(simplified_prim)} + C $$</td></tr>
+                </table>
+                <div class="result-box">🎯 <strong>Resultado: ${latex(simplified_prim)} + C$</strong></div>
+                """
             html += "</div>"
             return html
         except Exception as e:
@@ -338,37 +402,37 @@ with col_in:
             st.session_state.history.append(f"{n1} {op[0]} {n2}")
 
     elif mode == "Linear Equation (1st Degree)":
-        eq = st.text_input("Equation (e.g., 2x + 3 = 7):", "2x + 3 = 7")
+        eq = st.text_input("Equation (e.g., 2x - 4 = 0):", "2x - 4 = 0")
         if st.button("📐 Solve", use_container_width=True):
             st.session_state.result_html = solver.solve_linear(eq)
             st.session_state.iframe_version += 1
             st.session_state.history.append(f"Linear: {eq}")
 
     elif mode == "Quadratic Equation (2nd Degree)":
-        eq = st.text_input("Equation (e.g., x^2 + 3x - 4 = 0):", "x^2 + 3x - 4 = 0")
+        eq = st.text_input("Equation (e.g., x^2 - 5x + 6 = 0):", "x^2 - 5x + 6 = 0")
         if st.button("🔢 Solve", use_container_width=True):
             st.session_state.result_html = solver.solve_quadratic(eq)
             st.session_state.iframe_version += 1
             st.session_state.history.append(f"Quadratic: {eq}")
 
     elif mode == "Differentiation (Derivatives)":
-        func = st.text_input("f(x) =", "x^2 + 3x + 5")
+        func = st.text_input("f(x) =", "(2x^3 - 4x)^5")
         var = st.selectbox("Variable:", ["x", "y", "z"])
-        eval_pt = st.text_input("Evaluate at point (optional):", "")
+        eval_pt = st.text_input("Evaluate at point (optional):", "1")
         if st.button("📈 Differentiate", use_container_width=True):
             st.session_state.result_html = solver.differentiate(func, var, eval_pt)
             st.session_state.iframe_version += 1
             st.session_state.history.append(f"Diff: f({var}) = {func}")
 
     elif mode == "Integration (Definite/Indefinite)":
-        func = st.text_input("f(x) =", "x^2 + 3x")
+        func = st.text_input("f(x) =", "3*x^2*exp(x^3)")
         var = st.selectbox("Variable:", ["x", "y", "z"])
         use_limits = st.checkbox("Definite integral")
         low_bnd, upp_bnd = None, None
         if use_limits:
             c1, c2 = st.columns(2)
             with c1: low_bnd = st.text_input("Lower limit:", "0")
-            with c2: upp_bnd = st.text_input("Upper limit:", "1")
+            with c2: upp_bnd = st.text_input("Upper limit:", "2")
         if st.button("📊 Integrate", use_container_width=True):
             st.session_state.result_html = solver.integrate_func(func, var, low_bnd, upp_bnd)
             st.session_state.iframe_version += 1
@@ -407,7 +471,7 @@ with col_out:
                               padding: 12px; text-align: center; margin: 12px 0; }}
         .result-box {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;
                        border-radius: 10px; padding: 18px; text-align: center; margin: 18px 0;
-                       font-size: 20px; font-weight: bold; }}
+                       font-size: 20px; font-weight: bold; box-shadow: 0 4px 10px rgba(102,126,234,0.3); }}
         .theory-box {{ background: #f0f4ff; border-left: 5px solid #667eea; border-radius: 10px;
                        padding: 16px; margin: 15px 0; }}
         .theory-title {{ font-size: 18px; font-weight: 700; color: #4c51bf; margin-bottom: 8px; }}

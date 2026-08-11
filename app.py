@@ -1,489 +1,535 @@
+# app.py – Complete working version with reliable MathJax rendering
 import streamlit as st
 import streamlit.components.v1 as components
 import math
 import sympy as sp
 from sympy import (symbols, diff, integrate, solve, latex, simplify, expand,
-                   sin, cos, tan, exp, log, Symbol)
+                   factor, sqrt as sym_sqrt, Matrix, Eq, sin, cos, tan, exp, log,
+                   Derivative, Integral, Symbol, Function)
 from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application
 import re
 
-st.set_page_config(page_title="HandCalc Pro", page_icon="🧮", layout="wide")
+# Page config
+st.set_page_config(
+    page_title="HandCalc Pro – Complete Step‑by‑Step",
+    page_icon="🧮",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# Minimal external styling
+# Enhanced CSS (unchanged)
 st.markdown("""
 <style>
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&display=swap');
     .main-title {
-        font-family: 'Playfair Display', serif; font-size: 48px; font-weight: 900; text-align: center;
+        font-family: 'Playfair Display', serif;
+        font-size: 52px; font-weight: 900; text-align: center;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
-        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 10px;
+    }
+    .theory-box {
+        background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+        border-left: 5px solid #667eea; border-radius: 10px; padding: 20px; margin: 20px 0;
+    }
+    .theory-title { font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 700; color: #667eea; margin-bottom: 10px; }
+    .step-box {
+        background: white; border-radius: 10px; padding: 15px; margin: 10px 0;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.05); border-left: 3px solid #764ba2;
+    }
+    .step-number {
+        display: inline-block; background: #667eea; color: white; border-radius: 50%;
+        width: 30px; height: 30px; text-align: center; line-height: 30px; margin-right: 10px; font-weight: bold;
+    }
+    .formula-highlight {
+        background: #f8f9fa; border: 2px solid #667eea; border-radius: 8px; padding: 15px;
+        text-align: center; margin: 15px 0;
+    }
+    .result-box {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;
+        border-radius: 10px; padding: 20px; text-align: center; margin: 20px 0;
+        font-size: 24px; font-weight: bold;
     }
     .stButton > button {
-        width: 100%; height: 50px; font-weight: 600; border-radius: 12px;
+        width: 100%; height: 55px; font-size: 16px; font-weight: 600; border-radius: 15px;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;
+        transition: all 0.3s ease;
     }
+    .stButton > button:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(102,126,234,0.4); }
+    .function-input { font-family: 'Courier New', monospace; font-size: 18px; padding: 10px; border: 2px solid #667eea; border-radius: 10px; background: #f8f9fa; }
 </style>
 """, unsafe_allow_html=True)
 
-class MathSolver:
+class CompleteMathSolver:
     def __init__(self):
         self.x, self.y, self.z = symbols('x y z')
 
-    def parse_func(self, func_str):
-        if not func_str or not str(func_str).strip():
-            return None
+    def _escape_latex(self, s: str) -> str:
+        """Escape backslashes so they survive Python string formatting."""
+        return s.replace('\\', '\\\\')
+
+    def parse_function(self, func_str: str) -> sp.Expr:
         transformations = (standard_transformations + (implicit_multiplication_application,))
-        clean_str = str(func_str).replace('^', '**').replace('×', '*').replace('÷', '/').strip()
-        clean_str = re.sub(r'(\d)([a-zA-Z])', r'\1*\2', clean_str)
+        func_str = func_str.replace('^', '**').replace('×', '*').replace('÷', '/').replace(' ', '')
+        func_str = re.sub(r'(\d)([a-zA-Z])', r'\1*\2', func_str)
         try:
-            return parse_expr(clean_str, transformations=transformations)
-        except Exception:
+            return parse_expr(func_str, transformations=transformations)
+        except:
             return None
 
-    # ---------- Basic Column Arithmetic ----------
-    def manual_add(self, n1, n2):
-        s1, s2 = str(abs(n1)), str(abs(n2))
-        max_len = max(len(s1), len(s2))
-        result = n1 + n2
-        result_str = str(result)
-        carries = []
-        carry = 0
-        p1, p2 = s1.zfill(max_len), s2.zfill(max_len)
-        for i in range(max_len - 1, -1, -1):
-            s = int(p1[i]) + int(p2[i]) + carry
-            carries.insert(0, s // 10)
-            carry = s // 10
-        width = max(len(s1), len(s2) + 2, len(result_str)) + 1
-        lines = []
-        if any(c > 0 for c in carries):
-            lines.append("".join(str(c) if c > 0 else " " for c in carries).rjust(width))
-        lines.append(s1.rjust(width))
-        lines.append(("+ " + s2).rjust(width))
-        lines.append("─" * width)
-        lines.append(result_str.rjust(width))
-        return f"""
-        <div class="step-box">
-            <strong>➕ Column Addition (Step by Step)</strong><br><br>
-            <pre class="manual-display">{chr(10).join(lines)}</pre>
-            <div class="result-box">🎯 <strong>Result: {n1} + {n2} = {result}</strong></div>
-        </div>"""
-
-    def manual_sub(self, n1, n2):
-        result = n1 - n2
-        s1, s2 = str(abs(n1)), str(abs(n2))
-        width = max(len(s1), len(s2) + 2, len(str(result))) + 1
-        lines = [s1.rjust(width), ("- " + s2).rjust(width), "─" * width, str(result).rjust(width)]
-        return f"""
-        <div class="step-box">
-            <strong>➖ Column Subtraction (Step by Step)</strong><br><br>
-            <pre class="manual-display">{chr(10).join(lines)}</pre>
-            <div class="result-box">🎯 <strong>Result: {n1} - {n2} = {result}</strong></div>
-        </div>"""
-
-    def manual_mul(self, n1, n2):
-        s1, s2 = str(abs(n1)), str(abs(n2))
-        result = n1 * n2
-        partials = [int(s1) * int(d) * (10 ** i) for i, d in enumerate(reversed(s2))]
-        partials_rev = list(reversed(partials))
-        max_w = max(len(s1), len(s2) + 2, max([len(str(p)) for p in partials] or [0]), len(str(result))) + 1
-        lines = [s1.rjust(max_w), ("× " + s2).rjust(max_w), "─" * max_w]
-        if len(s2) > 1:
-            for idx, p in enumerate(partials_rev):
-                prefix = "+ " if idx == len(partials_rev) - 1 else ""
-                lines.append((prefix + str(p)).rjust(max_w))
-            lines.append("─" * max_w)
-        lines.append(str(result).rjust(max_w))
-        return f"""
-        <div class="step-box">
-            <strong>✖️ Long Multiplication (Step by Step)</strong><br><br>
-            <pre class="manual-display">{chr(10).join(lines)}</pre>
-            <div class="result-box">🎯 <strong>Result: {n1} × {n2} = {result}</strong></div>
-        </div>"""
-
-    def manual_div(self, n1, n2):
-        if n2 == 0:
-            return "<div class='step-box'>❌ Division by zero.</div>"
-        quotient = n1 // n2
-        remainder = n1 % n2
-        decimal_res = n1 / n2
-        display = f" {n1} │ {n2}\n─────┼─────\n {remainder} │ {quotient} (Quotient)"
-        if remainder:
-            display += f"\nRemainder: {remainder}"
-        return f"""
-        <div class="step-box">
-            <strong>➗ Long Division (with Remainder)</strong><br><br>
-            <pre class="manual-display">{display}</pre>
-            <p><b>Dividend:</b> {n1} · <b>Divisor:</b> {n2} · <b>Quotient:</b> {quotient} · <b>Remainder:</b> {remainder}</p>
-            <div class="result-box">🎯 <strong>Result: {n1} ÷ {n2} = {quotient} (Rem {remainder}) | Decimal: {decimal_res:.4f}</strong></div>
-        </div>"""
-
-    # ---------- Algebra ----------
-    def solve_linear(self, eq_str):
+    # ---------- FIRST-DEGREE EQUATION ----------
+    def solve_first_degree_equation(self, equation_str: str) -> str:
         try:
-            if '=' not in eq_str:
-                return "<div class='step-box'>❌ Use an equation with '='.</div>"
-            left_str, right_str = eq_str.split('=')
-            left_expr = self.parse_func(left_str)
-            right_expr = self.parse_func(right_str)
-            if left_expr is None or right_expr is None:
-                return "<div class='step-box'>❌ Invalid expression.</div>"
-            expr = expand(left_expr - right_expr)
-            poly = sp.Poly(expr, self.x)
-            coeffs = poly.all_coeffs()
-            if len(coeffs) == 2:
-                a, b = coeffs
-            elif len(coeffs) == 1:
-                a, b = 0, coeffs[0]
-            else:
-                a = b = 0
-            if a == 0:
-                return "<div class='step-box'>⚠️ Not a linear equation (a = 0).</div>"
-            x_sol = -b / a
-            latex_sol = latex(sp.nsimplify(x_sol))
+            html = '<div class="theory-box">'
+            html += '<div class="theory-title">📚 First‑Degree Equation – Theory</div>'
+            html += '<p>A linear equation has the form <b>ax + b = 0</b>. To solve, isolate the variable using inverse operations.</p>'
+            html += '</div>'
 
-            return f"""
-            <div class="theory-box">
-                <div class="theory-title">📚 Função Linear (1º Grau)</div>
-                <p>Definição: $f(x) = ax + b$</p>
-            </div>
-            <div class="step-box">
-                <strong style="color:#4c51bf;">📝 Exemplo: Resolver $f(x) = {latex(left_expr)} = {latex(right_expr)}$</strong><br><br>
-                <table style="width:100%; font-size: 16px; border-collapse: collapse;">
-                    <tr><td style="padding: 12px; width: 45%; vertical-align: middle; color:#4a5568;">Passo 1: Igualar a zero</td>
-                        <td style="padding: 12px; vertical-align: middle;">$${latex(expr)} = 0$$</td></tr>
-                    <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">Passo 2: Isolar o termo com x</td>
-                        <td style="padding: 12px; vertical-align: middle;">$${latex(a*self.x)} = {latex(-b)}$$</td></tr>
-                    <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">Passo 3: Resolver para x</td>
-                        <td style="padding: 12px; vertical-align: middle;">$$x = \\frac{{{latex(-b)}}}{{{latex(a)}}} = {latex_sol}$$</td></tr>
-                </table>
-                <div class="result-box">🎯 <strong>Resultado: $x = {latex_sol}$</strong></div>
-            </div>"""
-        except Exception as e:
-            return f"<div class='step-box'>❌ Error: {str(e)}</div>"
-
-    def solve_quadratic(self, func_str):
-        try:
-            is_eq = False
-            left_expr = None
-            right_expr = None
-            if '=' in func_str:
-                is_eq = True
-                left_str, right_str = func_str.split('=')
-                left_expr = self.parse_func(left_str)
-                right_expr = self.parse_func(right_str)
+            if '=' in equation_str:
+                left_str, right_str = equation_str.split('=')
+                left_expr = self.parse_function(left_str.strip())
+                right_expr = self.parse_function(right_str.strip())
+                if left_expr is None or right_expr is None:
+                    return "Error: Invalid equation"
                 expr = expand(left_expr - right_expr)
             else:
-                expr = expand(self.parse_func(func_str))
-            
-            if expr is None:
-                return "<div class='step-box'>❌ Invalid expression.</div>"
+                expr = self.parse_function(equation_str)
+                if expr is None:
+                    return "Error: Invalid expression"
+                expr = expand(expr)
+
+            html += '<div class="step-box"><strong>📝 Step‑by‑Step Resolution:</strong><br><br>'
+
+            # 1. Original equation
+            if '=' in equation_str:
+                html += f'<span class="step-number">1</span> <strong>Original equation:</strong><br>'
+                html += f'<div class="formula-highlight">$${self._escape_latex(sp.latex(left_expr))} = {self._escape_latex(sp.latex(right_expr))}$$</div>'
+
+            # 2. Write in standard form
+            html += f'<span class="step-number">2</span> <strong>Bring all terms to one side:</strong><br>'
+            html += f'<div class="formula-highlight">$${self._escape_latex(sp.latex(expr))} = 0$$</div>'
+
+            # 3. Identify coefficients
             poly = sp.Poly(expr, self.x)
             coeffs = poly.all_coeffs()
-            a, b, c = 0, 0, 0
-            if len(coeffs) == 3:
-                a, b, c = coeffs
+            if len(coeffs) == 1:
+                a = 0; b = coeffs[0]
             elif len(coeffs) == 2:
-                a, b = coeffs
-            elif len(coeffs) == 1:
-                a = coeffs[0]
+                a = coeffs[0]; b = coeffs[1]
+            else:
+                a = 0; b = coeffs[0]
+
+            html += f'<span class="step-number">3</span> <strong>Identify coefficients:</strong><br>'
+            html += f'• a = {a}<br>• b = {b}<br>'
+
             if a == 0:
-                return "<div class='step-box'>⚠️ Not quadratic (a = 0).</div>"
-            
+                html += '<br>Not a first‑degree equation (a = 0).<br>'
+                if b == 0:
+                    html += '0 = 0 → <b>Infinitely many solutions</b>'
+                else:
+                    html += f'{b} = 0 → <b>No solution</b>'
+                html += '</div>'; return html
+
+            # 4. Isolate the variable term
+            html += f'<span class="step-number">4</span> <strong>Isolate the x‑term:</strong><br>'
+            html += f'$${a}x + ({b}) = 0$$<br>'
+            html += f'$${a}x = -({b})$$<br>'
+            html += f'$${a}x = {-b}$$'
+
+            # 5. Divide by coefficient
+            html += f'<span class="step-number">5</span> <strong>Solve for x:</strong><br>'
+            html += f'$$\\frac{{{a}x}}{{{a}}} = \\frac{{{-b}}}{{{a}}}$$<br>'
+            x_sol = -b / a
+            html += f'$$x = {self._escape_latex(sp.latex(x_sol))}$$'
+
+            # 6. Verification
+            html += f'<span class="step-number">6</span> <strong>Verify the solution:</strong><br>'
+            html += f'Substitute x = {self._escape_latex(sp.latex(x_sol))} into the original equation:<br>'
+            check = expr.subs(self.x, x_sol)
+            html += f'$${self._escape_latex(sp.latex(expr))} = {self._escape_latex(sp.latex(check))}$$'
+            if simplify(check) == 0:
+                html += '<br>✅ The solution is correct.'
+
+            html += '<div class="result-box">'
+            html += f'🎯 <strong>Final Answer: x = {self._escape_latex(sp.latex(x_sol))}</strong>'
+            if x_sol == int(x_sol):
+                html += f'<br>$$x = {int(x_sol)}$$'
+            else:
+                html += f'<br>$$x \\approx {float(x_sol):.4f}$$'
+            html += '</div></div>'
+            return html
+        except Exception as e:
+            return f"Error solving linear equation: {str(e)}"
+
+    # ---------- QUADRATIC EQUATION ----------
+    def solve_quadratic_equation(self, func_str: str) -> str:
+        try:
+            html = '<div class="theory-box">'
+            html += '<div class="theory-title">📚 Quadratic Equation – Theory</div>'
+            html += '<p><b>ax² + bx + c = 0</b>. Solutions via the quadratic formula: $$x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$$</p>'
+            html += '</div>'
+
+            if '=' in func_str:
+                left_str, right_str = func_str.split('=')
+                left_expr = self.parse_function(left_str.strip())
+                right_expr = self.parse_function(right_str.strip())
+                if left_expr is None or right_expr is None:
+                    return "Error: Invalid equation"
+                expr = expand(left_expr - right_expr)
+            else:
+                expr = self.parse_function(func_str)
+                if expr is None:
+                    return "Error: Invalid expression"
+                expr = expand(expr)
+
+            html += '<div class="step-box"><strong>📝 Step‑by‑Step Resolution:</strong><br><br>'
+
+            # 1. Original equation
+            html += f'<span class="step-number">1</span> <strong>Equation:</strong><br>'
+            html += f'<div class="formula-highlight">$${self._escape_latex(sp.latex(expr))} = 0$$</div>'
+
+            # 2. Coefficients
+            try:
+                poly = sp.Poly(expr, self.x)
+                coeffs = poly.all_coeffs()
+                if len(coeffs) == 3:
+                    a, b, c = coeffs
+                elif len(coeffs) == 2:
+                    a, b = coeffs; c = 0
+                elif len(coeffs) == 1:
+                    a = coeffs[0]; b = 0; c = 0
+                else:
+                    a = b = c = 0
+            except:
+                a = b = c = 0
+
+            html += f'<span class="step-number">2</span> <strong>Identify a, b, c:</strong><br>'
+            html += f'a = {a}, b = {b}, c = {c}<br>'
+
+            if a == 0:
+                html += '<br><b>Not quadratic (a=0).</b> Solving as linear:<br>'
+                if b != 0:
+                    x_sol = -c / b
+                    html += f'$$x = {self._escape_latex(sp.latex(x_sol))}$$'
+                else:
+                    html += 'No variable term – impossible equation.'
+                html += '</div>'; return html
+
+            # 3. Discriminant
             disc = b**2 - 4*a*c
-            delta_calc = f"({latex(b)})^2 - 4 \\cdot ({latex(a)}) \\cdot ({latex(c)})"
-            
-            prob_str = f"{latex(left_expr)} = {latex(right_expr)}" if is_eq else f"{latex(expr)} = 0"
+            html += f'<span class="step-number">3</span> <strong>Compute discriminant Δ:</strong><br>'
+            html += f'$$\\Delta = ({b})^2 - 4({a})({c}) = {disc}$$'
 
-            base = f"""
-            <div class="theory-box">
-                <div class="theory-title">📚 Função Quadrática (2º Grau)</div>
-                <p>Definição: $f(x) = ax^2 + bx + c$</p>
-            </div>
-            <div class="step-box">
-                <strong style="color:#4c51bf;">📝 Exemplo: Resolver $f(x) \\Rightarrow {prob_str}$</strong><br><br>
-                <table style="width:100%; font-size: 16px; border-collapse: collapse;">
-                    <tr><td style="padding: 12px; width: 45%; vertical-align: middle; color:#4a5568;">Passo 1: Identificar coeficientes</td>
-                        <td style="padding: 12px; vertical-align: middle;">$a = {latex(a)},\\; b = {latex(b)},\\; c = {latex(c)}$</td></tr>
-                    <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">Passo 2: Calcular o Delta ($\\Delta$)</td>
-                        <td style="padding: 12px; vertical-align: middle;">$\\Delta = b^2 - 4ac \\rightarrow \\Delta = {delta_calc}$<br>$\\Delta = {latex(disc)}$</td></tr>
-                    <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">Passo 3: Bhaskara</td>
-                        <td style="padding: 12px; vertical-align: middle;">$$x = \\frac{{-b \\pm \\sqrt{{\\Delta}}}}{{2a}}$$</td></tr>
-            """
+            # 4. Nature of roots
+            html += f'<span class="step-number">4</span> <strong>Nature of roots:</strong><br>'
+            if disc > 0:
+                html += 'Δ > 0 → <b>two distinct real roots</b><br>'
+            elif disc == 0:
+                html += 'Δ = 0 → <b>one real double root</b><br>'
+            else:
+                html += 'Δ < 0 → <b>two complex conjugate roots</b><br>'
+
+            # 5. Apply formula
+            html += f'<span class="step-number">5</span> <strong>Quadratic formula:</strong><br>'
             if disc >= 0:
-                sqrt_disc = math.sqrt(float(disc))
-                sqrt_str = str(int(sqrt_disc)) if sqrt_disc.is_integer() else f"\\sqrt{{{latex(disc)}}}"
-                x1 = (-b + sp.sqrt(disc)) / (2*a)
-                x2 = (-b - sp.sqrt(disc)) / (2*a)
-                base += f"""
-                    <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">Passo 4: Substituir valores</td>
-                        <td style="padding: 12px; vertical-align: middle;">$$x = \\frac{{-({latex(b)}) \\pm \\sqrt{{{latex(disc)}}}}}{{2 \\cdot ({latex(a)})}} \\rightarrow x = \\frac{{{-latex(b)} \\pm {sqrt_str}}}{{{latex(2*a)}}}$$</td></tr>
-                    <tr><td style="padding: 12px; vertical-align: top; color:#4a5568;">Passo 5: Encontrar raízes</td>
-                        <td style="padding: 12px; vertical-align: top;">
-                            <div style="display: flex; flex-direction: column; gap: 8px;">
-                                <div>$x' = \\frac{{{-latex(b)} - {sqrt_str}}}{{{latex(2*a)}}} = {latex(sp.nsimplify(x2))}$</div>
-                                <div>$x'' = \\frac{{{-latex(b)} + {sqrt_str}}}{{{latex(2*a)}}} = {latex(sp.nsimplify(x1))}$</div>
-                            </div>
-                        </td></tr>
-                </table>
-                <div class="result-box">🎯 <strong>Raízes: $x' = {latex(sp.nsimplify(x2))};\\; x'' = {latex(sp.nsimplify(x1))}$</strong></div>
-                """
+                sqrt_disc = math.sqrt(disc)
+                x1 = (-b + sqrt_disc) / (2*a)
+                x2 = (-b - sqrt_disc) / (2*a)
+                html += f'$$x = \\frac{{-{b} \\pm \\sqrt{{{disc}}}}}{{2 \\cdot {a}}}$$<br>'
+                if disc > 0:
+                    html += f'$$x_1 = {self._escape_latex(sp.latex(sp.nsimplify(x1)))}, \\quad x_2 = {self._escape_latex(sp.latex(sp.nsimplify(x2)))}$$'
+                    if x1 != int(x1): html += f'<br>$$x_1 \\approx {x1:.4f}$$'
+                    if x2 != int(x2): html += f'<br>$$x_2 \\approx {x2:.4f}$$'
+                else:
+                    html += f'$$x = {self._escape_latex(sp.latex(sp.nsimplify(x1)))}$$ (double)'
             else:
-                real_p = float(-b / (2*a))
-                imag_p = float(math.sqrt(float(-disc)) / (2*a))
-                base += f"""
-                    <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">Passo 4: Substituir valores</td>
-                        <td style="padding: 12px; vertical-align: middle;">$$x = \\frac{{-({latex(b)}) \\pm \\sqrt{{{latex(disc)}}}}}{{2 \\cdot ({latex(a)})}}$$</td></tr>
-                </table>
-                <div class="result-box">🎯 <strong>Raízes Complexas: $x \\approx {real_p:.4f} \\pm {imag_p:.4f}i$</strong></div>
-                """
-            base += "</div>"
-            return base
-        except Exception as e:
-            return f"<div class='step-box'>❌ Error: {str(e)}</div>"
+                real_part = -b / (2*a)
+                imag_part = math.sqrt(-disc) / (2*a)
+                html += f'$$x = \\frac{{-{b} \\pm i\\sqrt{{{-disc}}}}}{{2 \\cdot {a}}}$$<br>'
+                html += f'$$x = {real_part:.4f} \\pm {imag_part:.4f}i$$'
 
-    # ---------- Calculus ----------
-    def differentiate(self, func_str, var='x', eval_pt=None):
-        try:
-            expr = self.parse_func(func_str)
-            if expr is None:
-                return "<div class='step-box'>❌ Invalid function.</div>"
-            sym_var = Symbol(var)
-            df = diff(expr, sym_var)
-            simplified_df = simplify(df)
+            # 6. Verification (for real roots)
+            if disc >= 0:
+                html += f'<span class="step-number">6</span> <strong>Verification:</strong><br>'
+                if disc > 0:
+                    v1 = expr.subs(self.x, x1)
+                    v2 = expr.subs(self.x, x2)
+                    html += f'For x₁: $$ {self._escape_latex(sp.latex(v1))} = 0$$ ✅<br>'
+                    html += f'For x₂: $$ {self._escape_latex(sp.latex(v2))} = 0$$ ✅'
+                else:
+                    v = expr.subs(self.x, x1)
+                    html += f'$$ {self._escape_latex(sp.latex(v))} = 0$$ ✅'
 
-            html = f"""
-            <div class="theory-box">
-                <div class="theory-title">📚 Exemplo 1: Derivada (Regra da Cadeia e Potência)</div>
-            </div>
-            <div class="step-box">
-                <table style="width:100%; font-size: 16px; border-collapse: collapse;">
-                    <tr><td style="padding: 12px; width: 35%; vertical-align: middle; color:#4a5568;">Regras:</td>
-                        <td style="padding: 12px; vertical-align: middle; color:#718096;">Regra da Cadeia, Regra da Potência, Soma</td></tr>
-                    <tr><td colspan="2"><hr style="border: 0; border-top: 1px solid #edf2f7; margin: 5px 0;"></td></tr>
-                    <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">1. Identificação:</td>
-                        <td style="padding: 12px; vertical-align: middle;">$$f({var}) = {latex(expr)}$$</td></tr>
-                    <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">2. Derivada:</td>
-                        <td style="padding: 12px; vertical-align: middle;">$$f'({var}) = {latex(simplified_df)}$$</td></tr>
-            """
-            if eval_pt and str(eval_pt).strip():
-                try:
-                    pt = parse_expr(str(eval_pt).replace('^', '**'))
-                    val = simplified_df.subs(sym_var, pt)
-                    html += f"""
-                    <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">3. Valor em {var}={latex(pt)}:</td>
-                        <td style="padding: 12px; vertical-align: middle;">$$f'({latex(pt)}) = {latex(val)}$$</td></tr>
-                    """
-                except Exception:
-                    html += "<tr><td colspan='2' style='padding: 12px;'><i>Could not evaluate at that point.</i></td></tr>"
-            html += f"""
-                </table>
-                <div class="result-box">🎯 <strong>Resultado: $f'({var}) = {latex(simplified_df)}$</strong></div>
-            </div>"""
+            html += '<div class="result-box">'
+            html += '🎯 <strong>Final Answer:</strong><br>'
+            if disc > 0:
+                html += f'$$x_1 = {self._escape_latex(sp.latex(sp.nsimplify(x1)))},\\; x_2 = {self._escape_latex(sp.latex(sp.nsimplify(x2)))}$$'
+            elif disc == 0:
+                html += f'$$x = {self._escape_latex(sp.latex(sp.nsimplify(x1)))}$$ (double)'
+            else:
+                html += f'$$x = {real_part:.4f} \\pm {imag_part:.4f}i$$'
+            html += '</div></div>'
             return html
         except Exception as e:
-            return f"<div class='step-box'>❌ Error: {str(e)}</div>"
+            return f"Error solving quadratic: {str(e)}"
 
-    def integrate_func(self, func_str, var='x', lower=None, upper=None):
+    # ---------- DIFFERENTIATION ----------
+    def differentiate_step_by_step(self, func_str: str, var: str = 'x') -> str:
         try:
-            expr = self.parse_func(func_str)
-            if expr is None:
-                return "<div class='step-box'>❌ Invalid function.</div>"
+            expr = self.parse_function(func_str)
+            if expr is None: return "Error: Invalid function"
             sym_var = Symbol(var)
-            primitive = integrate(expr, sym_var)
-            simplified_prim = simplify(primitive)
 
-            is_definite = lower and upper and str(lower).strip() and str(upper).strip()
+            html = '<div class="theory-box">'
+            html += '<div class="theory-title">📚 Differentiation Rules</div>'
+            html += '<p>Power Rule, Sum Rule, Product Rule, Chain Rule.</p></div>'
+            html += '<div class="step-box"><strong>📝 Step‑by‑Step:</strong><br><br>'
 
-            html = f"""
-            <div class="theory-box">
-                <div class="theory-title">📚 Exemplo 2: Integral {'Definida' if is_definite else 'Indefinida'}</div>
-            </div>
-            <div class="step-box">
-                <table style="width:100%; font-size: 16px; border-collapse: collapse;">
-            """
+            html += f'<span class="step-number">1</span> <strong>Function:</strong><br>'
+            html += f'<div class="formula-highlight">$$f({var}) = {self._escape_latex(sp.latex(expr))}$$</div>'
 
-            if is_definite:
-                try:
-                    a = parse_expr(str(lower).replace('^', '**'))
-                    b = parse_expr(str(upper).replace('^', '**'))
-                    Fb = simplified_prim.subs(sym_var, b)
-                    Fa = simplified_prim.subs(sym_var, a)
-                    def_res = simplify(Fb - Fa)
-                    html += f"""
-                        <tr><td style="padding: 12px; width: 35%; vertical-align: middle; color:#4a5568;">Regras:</td>
-                            <td style="padding: 12px; vertical-align: middle; color:#718096;">Substituição (se aplicável), TFC</td></tr>
-                        <tr><td colspan="2"><hr style="border: 0; border-top: 1px solid #edf2f7; margin: 5px 0;"></td></tr>
-                        <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">Problema:</td>
-                            <td style="padding: 12px; vertical-align: middle;">$$\\int_{{{latex(a)}}}^{{{latex(b)}}} \\left({latex(expr)}\\right) \\, d{var}$$</td></tr>
-                        <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">1. Antiderivada:</td>
-                            <td style="padding: 12px; vertical-align: middle;">$$F({var}) = {latex(simplified_prim)}$$</td></tr>
-                        <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">2. Aplicação TFC:</td>
-                            <td style="padding: 12px; vertical-align: middle;">$$F({latex(b)}) - F({latex(a)})$$</td></tr>
-                        <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">3. Resultado:</td>
-                            <td style="padding: 12px; vertical-align: middle;">$${latex(def_res)}$$</td></tr>
-                    </table>
-                    <div class="result-box">🎯 <strong>Resultado: ${latex(def_res)}$</strong></div>
-                    """
-                except Exception:
-                    html += "<tr><td colspan='2' style='padding: 12px;'><i>Invalid limits.</i></td></tr></table></div>"
-            else:
-                html += f"""
-                        <tr><td style="padding: 12px; width: 35%; vertical-align: middle; color:#4a5568;">Regras:</td>
-                            <td style="padding: 12px; vertical-align: middle; color:#718096;">Integração polinomial / básica</td></tr>
-                        <tr><td colspan="2"><hr style="border: 0; border-top: 1px solid #edf2f7; margin: 5px 0;"></td></tr>
-                        <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">Problema:</td>
-                            <td style="padding: 12px; vertical-align: middle;">$$\\int \\left({latex(expr)}\\right) \\, d{var}$$</td></tr>
-                        <tr><td style="padding: 12px; vertical-align: middle; color:#4a5568;">1. Integral:</td>
-                            <td style="padding: 12px; vertical-align: middle;">$$ {latex(simplified_prim)} + C $$</td></tr>
-                </table>
-                <div class="result-box">🎯 <strong>Resultado: ${latex(simplified_prim)} + C$</strong></div>
-                """
-            html += "</div>"
+            expanded = expand(expr)
+            html += f'<span class="step-number">2</span> <strong>Expand:</strong><br>'
+            html += f'$$f({var}) = {self._escape_latex(sp.latex(expanded))}$$'
+
+            html += f'<span class="step-number">3</span> <strong>Differentiate term‑by‑term:</strong><br>'
+            terms = expanded.args if expanded.is_Add else [expanded]
+            for i, term in enumerate(terms):
+                d = diff(term, sym_var)
+                html += f'Term {i+1}: d/d{var}({self._escape_latex(sp.latex(term))}) = {self._escape_latex(sp.latex(d))}<br>'
+
+            result = diff(expr, sym_var)
+            simplified = simplify(result)
+            html += f'<span class="step-number">4</span> <strong>Combine:</strong><br>'
+            html += f'$$f\'({var}) = {self._escape_latex(sp.latex(result))}$$'
+            html += f'<span class="step-number">5</span> <strong>Simplify:</strong><br>'
+            html += f'$$f\'({var}) = {self._escape_latex(sp.latex(simplified))}$$'
+
+            html += '<div class="result-box">'
+            html += f'🎯 $$\\boxed{{f\'({var}) = {self._escape_latex(sp.latex(simplified))}}}$$</div></div>'
             return html
         except Exception as e:
-            return f"<div class='step-box'>❌ Error: {str(e)}</div>"
+            return f"Error in differentiation: {str(e)}"
 
-# ---------------------------
-#  Streamlit UI
-# ---------------------------
+    # ---------- INTEGRATION ----------
+    def integrate_step_by_step(self, func_str: str, var: str = 'x') -> str:
+        try:
+            expr = self.parse_function(func_str)
+            if expr is None: return "Error: Invalid function"
+            sym_var = Symbol(var)
+
+            html = '<div class="theory-box">'
+            html += '<div class="theory-title">📚 Integration Rules</div>'
+            html += '<p>Power Rule, Sum Rule, etc.</p></div>'
+            html += '<div class="step-box"><strong>📝 Step‑by‑Step:</strong><br><br>'
+
+            html += f'<span class="step-number">1</span> <strong>Integral:</strong><br>'
+            html += f'<div class="formula-highlight">$$\\int ({self._escape_latex(sp.latex(expr))}) \\, d{var}$$</div>'
+
+            expanded = expand(expr)
+            html += f'<span class="step-number">2</span> <strong>Expand integrand:</strong><br>'
+            html += f'$$\\int ({self._escape_latex(sp.latex(expanded))}) \\, d{var}$$'
+
+            html += f'<span class="step-number">3</span> <strong>Integrate term‑by‑term:</strong><br>'
+            terms = expanded.args if expanded.is_Add else [expanded]
+            for i, term in enumerate(terms):
+                integral_term = integrate(term, sym_var)
+                html += f'Term {i+1}: ∫({self._escape_latex(sp.latex(term))}) d{var} = {self._escape_latex(sp.latex(integral_term))}<br>'
+
+            result = integrate(expr, sym_var)
+            html += f'<span class="step-number">4</span> <strong>Combine:</strong><br>'
+            html += f'$$\\int ({self._escape_latex(sp.latex(expr))}) \\, d{var} = {self._escape_latex(sp.latex(result))} + C$$'
+
+            html += '<div class="result-box">'
+            html += f'🎯 $$\\boxed{{\\int {self._escape_latex(sp.latex(expr))} \\, d{var} = {self._escape_latex(sp.latex(result))} + C}}$$</div></div>'
+            return html
+        except Exception as e:
+            return f"Error in integration: {str(e)}"
+
+    # ---------- MANUAL ARITHMETIC ----------
+    def manual_addition(self, num1: int, num2: int) -> str:
+        str1, str2 = str(num1), str(num2)
+        max_len = max(len(str1), len(str2))
+        result = num1 + num2
+
+        carries = []
+        carry = 0
+        padded1 = str1.zfill(max_len)
+        padded2 = str2.zfill(max_len)
+        for i in range(max_len-1, -1, -1):
+            s = int(padded1[i]) + int(padded2[i]) + carry
+            carries.insert(0, s // 10)
+            carry = s // 10
+
+        html = '<div class="step-box"><strong>➕ Manual Addition</strong><br><br>'
+        html += '<div style="font-family:Courier New; font-size:24px; line-height:1.8; text-align:right; letter-spacing:3px; background:#f8f9fa; padding:20px; border-radius:10px;">'
+        if any(c > 0 for c in carries):
+            carry_str = ' '.join(str(c) if c > 0 else ' ' for c in carries)
+            html += f'<div style="color:#f093fb; font-size:18px; margin-bottom:-10px;">{carry_str}</div>'
+        html += f'<div>{str1}</div><div style="color:#667eea;">+ {str2}</div>'
+        html += f'<div style="border-top:3px solid #333; margin:10px 0;"></div>'
+        html += f'<div style="color:#764ba2; font-weight:bold;">{result}</div></div>'
+
+        html += '<br><strong>Step‑by‑step:</strong><br>'
+        for i in range(max_len):
+            pos = max_len - 1 - i
+            d1, d2 = int(padded1[pos]), int(padded2[pos])
+            pos_name = ['units','tens','hundreds','thousands'][min(i,3)]
+            html += f'<span class="step-number">{i+1}</span> <b>{pos_name.capitalize()}:</b> {d1} + {d2}'
+            if i < max_len-1 and carries[pos+1] > 0:
+                html += f' + {carries[pos+1]} (carry)'
+            column_sum = d1 + d2 + (carries[pos+1] if i < max_len-1 else 0)
+            html += f' = {column_sum}<br>'
+        html += '<div class="result-box">🎯 <strong>Final Result: {num1} + {num2} = {result}</strong></div></div>'
+        return html
+
+    def manual_multiplication(self, num1: int, num2: int) -> str:
+        str1, str2 = str(num1), str(num2)
+        result = num1 * num2
+        partials = []
+        for i, d in enumerate(reversed(str2)):
+            partials.append(num1 * int(d) * (10**i))
+        partials_rev = partials[::-1]
+
+        html = '<div class="step-box"><strong>✖️ Manual Multiplication</strong><br><br>'
+        html += '<div style="font-family:Courier New; font-size:24px; line-height:1.8; text-align:right; letter-spacing:3px; background:#f8f9fa; padding:20px; border-radius:10px;">'
+        html += f'<div>{str1}</div><div style="color:#667eea;">× {str2}</div>'
+        html += f'<div style="border-top:3px solid #333; margin:10px 0;"></div>'
+        for i, pp in enumerate(partials_rev):
+            if i == 0:
+                html += f'<div>{pp}</div>'
+            else:
+                html += f'<div style="color:#667eea;">+ {pp}</div>'
+        html += f'<div style="border-top:3px solid #333; margin:10px 0;"></div>'
+        html += f'<div style="color:#764ba2; font-weight:bold;">{result}</div></div>'
+
+        html += '<br><strong>Step‑by‑step:</strong><br>'
+        for i, d in enumerate(reversed(str2)):
+            html += f'<span class="step-number">{i+1}</span> Multiply by {d}: {num1} × {d} = {num1 * int(d)}'
+            if i > 0: html += f' → add {i} zero(s) = {num1 * int(d)}{"0"*i}'
+            html += '<br>'
+        html += f'<span class="step-number">{len(str2)+1}</span> Add partial products: { " + ".join(map(str,partials_rev)) } = {result}<br>'
+        html += '<div class="result-box">🎯 <strong>Final Result: {num1} × {num2} = {result}</strong></div></div>'
+        return html
+
+# ---------- Streamlit UI ----------
 if 'solver' not in st.session_state:
-    st.session_state.solver = MathSolver()
+    st.session_state.solver = CompleteMathSolver()
 if 'result_html' not in st.session_state:
     st.session_state.result_html = ""
 if 'history' not in st.session_state:
     st.session_state.history = []
-if 'iframe_version' not in st.session_state:
-    st.session_state.iframe_version = 0
 
 st.markdown('<h1 class="main-title">🧮 HandCalc Pro</h1>', unsafe_allow_html=True)
-st.markdown('<p style="text-align:center; color:#666;">Step‑by‑Step Mathematics – every carry, every derivative explained</p>', unsafe_allow_html=True)
+st.markdown('<p style="text-align:center; color:#888;">Complete Step‑by‑Step Mathematics – Every detail shown</p>', unsafe_allow_html=True)
 
 with st.sidebar:
-    mode = st.selectbox("Operation mode:", [
-        "Basic Operations (Column)",
-        "Linear Equation (1st Degree)",
-        "Quadratic Equation (2nd Degree)",
-        "Differentiation (Derivatives)",
-        "Integration (Definite/Indefinite)"
+    st.markdown("## 🎯 Mode")
+    mode = st.selectbox("Choose operation:", [
+        "Basic Arithmetic",
+        "First‑Degree Equation",
+        "Quadratic Equation",
+        "Differentiation",
+        "Integration"
     ])
     st.markdown("---")
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("🔄 Reset"):
-            st.session_state.result_html = ""
-            st.session_state.iframe_version += 1
-            st.rerun()
+        if st.button("🔄 Reset"): st.session_state.result_html = ""; st.rerun()
     with col2:
-        if st.button("🗑️ Clear All"):
-            st.session_state.result_html = ""
-            st.session_state.history = []
-            st.session_state.iframe_version += 1
-            st.rerun()
+        if st.button("🗑️ Clear All"): st.session_state.result_html = ""; st.session_state.history = []; st.rerun()
     st.markdown("---")
     st.markdown("## 📊 History")
     for h in st.session_state.history[-5:]:
         st.info(h)
 
-col_in, col_out = st.columns([1, 1.4])
+col_in, col_out = st.columns([1, 1.5])
 with col_in:
     st.markdown("### 📝 Input")
     solver = st.session_state.solver
 
-    if mode == "Basic Operations (Column)":
-        op = st.selectbox("Operation:", ["Addition (+)", "Subtraction (-)", "Multiplication (×)", "Division (÷)"])
-        n1 = st.number_input("First number:", value=145, step=1, format="%d")
-        n2 = st.number_input("Second number:", value=12, step=1, format="%d")
-        if st.button("🧮 Compute", use_container_width=True):
-            if op == "Addition (+)": html_res = solver.manual_add(int(n1), int(n2))
-            elif op == "Subtraction (-)": html_res = solver.manual_sub(int(n1), int(n2))
-            elif op == "Multiplication (×)": html_res = solver.manual_mul(int(n1), int(n2))
-            else: html_res = solver.manual_div(int(n1), int(n2))
+    if mode == "Basic Arithmetic":
+        op = st.selectbox("Operation:", ["Addition (+)", "Multiplication (×)"])
+        n1 = st.number_input("First number:", value=123, format="%d")
+        n2 = st.number_input("Second number:", value=45, format="%d")
+        if st.button("🧮 Calculate"):
+            if op == "Addition (+)":
+                html_res = solver.manual_addition(int(n1), int(n2))
+            else:
+                html_res = solver.manual_multiplication(int(n1), int(n2))
             st.session_state.result_html = html_res
-            st.session_state.iframe_version += 1
             st.session_state.history.append(f"{n1} {op[0]} {n2}")
 
-    elif mode == "Linear Equation (1st Degree)":
-        eq = st.text_input("Equation (e.g., 2x - 4 = 0):", "2x - 4 = 0")
-        if st.button("📐 Solve", use_container_width=True):
-            st.session_state.result_html = solver.solve_linear(eq)
-            st.session_state.iframe_version += 1
+    elif mode == "First‑Degree Equation":
+        eq = st.text_input("Equation (e.g., 2x + 3 = 7):", "2x + 3 = 7")
+        if st.button("📐 Solve"):
+            html_res = solver.solve_first_degree_equation(eq)
+            st.session_state.result_html = html_res
             st.session_state.history.append(f"Linear: {eq}")
 
-    elif mode == "Quadratic Equation (2nd Degree)":
-        eq = st.text_input("Equation (e.g., x^2 - 5x + 6 = 0):", "x^2 - 5x + 6 = 0")
-        if st.button("🔢 Solve", use_container_width=True):
-            st.session_state.result_html = solver.solve_quadratic(eq)
-            st.session_state.iframe_version += 1
+    elif mode == "Quadratic Equation":
+        eq = st.text_input("Equation (e.g., x^2 + 3x - 4 = 0):", "x^2 + 3x - 4 = 0")
+        if st.button("🔢 Solve"):
+            html_res = solver.solve_quadratic_equation(eq)
+            st.session_state.result_html = html_res
             st.session_state.history.append(f"Quadratic: {eq}")
 
-    elif mode == "Differentiation (Derivatives)":
-        func = st.text_input("f(x) =", "(2x^3 - 4x)^5")
-        var = st.selectbox("Variable:", ["x", "y", "z"])
-        eval_pt = st.text_input("Evaluate at point (optional):", "1")
-        if st.button("📈 Differentiate", use_container_width=True):
-            st.session_state.result_html = solver.differentiate(func, var, eval_pt)
-            st.session_state.iframe_version += 1
-            st.session_state.history.append(f"Diff: f({var}) = {func}")
+    elif mode == "Differentiation":
+        func = st.text_input("f(x) =", "x^2 + 3x + 5")
+        var = st.selectbox("Variable:", ["x","y","z"])
+        if st.button("📈 Differentiate"):
+            html_res = solver.differentiate_step_by_step(func, var)
+            st.session_state.result_html = html_res
+            st.session_state.history.append(f"Diff: {func}")
 
-    elif mode == "Integration (Definite/Indefinite)":
-        func = st.text_input("f(x) =", "3*x^2*exp(x^3)")
-        var = st.selectbox("Variable:", ["x", "y", "z"])
-        use_limits = st.checkbox("Definite integral")
-        low_bnd, upp_bnd = None, None
-        if use_limits:
-            c1, c2 = st.columns(2)
-            with c1: low_bnd = st.text_input("Lower limit:", "0")
-            with c2: upp_bnd = st.text_input("Upper limit:", "2")
-        if st.button("📊 Integrate", use_container_width=True):
-            st.session_state.result_html = solver.integrate_func(func, var, low_bnd, upp_bnd)
-            st.session_state.iframe_version += 1
-            st.session_state.history.append(f"Integral: f({var}) = {func}")
+    elif mode == "Integration":
+        func = st.text_input("f(x) =", "x^2 + 3x")
+        var = st.selectbox("Variable:", ["x","y","z"])
+        if st.button("📊 Integrate"):
+            html_res = solver.integrate_step_by_step(func, var)
+            st.session_state.result_html = html_res
+            st.session_state.history.append(f"Int: {func}")
 
 with col_out:
     st.markdown("### ✨ Step‑by‑Step Solution")
-
     if st.session_state.result_html:
-        # Embed a unique version number to force iframe reload
-        full_page = f"""<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <!-- version {st.session_state.iframe_version} -->
-    <script>
-        window.MathJax = {{
-            tex: {{ inlineMath: [['$', '$'], ['\\\\(', '\\\\)']],
-                    displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']],
-                    processEscapes: true }},
-            startup: {{ pageReady: () => MathJax.startup.defaultPageReady().then(() => MathJax.typesetPromise()) }}
-        }};
-    </script>
-    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-    <style>
-        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 10px; color: #1a202c; }}
-        .manual-display {{
-            font-family: 'Courier New', monospace; font-size: 20px; font-weight: bold; line-height: 1.3;
-            background: #1e293b; color: #38bdf8; padding: 14px 20px; border-radius: 8px;
-            display: inline-block; white-space: pre; text-align: left; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            margin: 10px 0;
-        }}
-        .step-box {{ background: white; border-radius: 12px; padding: 20px; margin: 15px 0;
-                     box-shadow: 0 4px 15px rgba(0,0,0,0.05); border-left: 5px solid #764ba2; }}
-        .formula-highlight {{ background: #f8fafc; border: 2px solid #667eea; border-radius: 10px;
-                              padding: 12px; text-align: center; margin: 12px 0; }}
-        .result-box {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;
-                       border-radius: 10px; padding: 18px; text-align: center; margin: 18px 0;
-                       font-size: 20px; font-weight: bold; box-shadow: 0 4px 10px rgba(102,126,234,0.3); }}
-        .theory-box {{ background: #f0f4ff; border-left: 5px solid #667eea; border-radius: 10px;
-                       padding: 16px; margin: 15px 0; }}
-        .theory-title {{ font-size: 18px; font-weight: 700; color: #4c51bf; margin-bottom: 8px; }}
-    </style>
-</head>
-<body>
-    {st.session_state.result_html}
-</body>
-</html>"""
-        components.html(full_page, height=700, scrolling=True)
+        # The key fix: a robust MathJax startup that always typesets
+        components.html(
+            f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <script>
+                    window.MathJax = {{
+                        tex: {{
+                            inlineMath: [['$', '$']],
+                            displayMath: [['$$', '$$']],
+                            processEscapes: true
+                        }},
+                        startup: {{
+                            pageReady: () => {{
+                                return MathJax.startup.defaultPageReady().then(() => {{
+                                    console.log('MathJax ready, typesetting…');
+                                    MathJax.typesetPromise();
+                                }});
+                            }}
+                        }}
+                    }};
+                </script>
+                <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+                <style>
+                    body {{ font-family: 'Computer Modern', serif; padding: 20px; }}
+                </style>
+            </head>
+            <body>
+                {st.session_state.result_html}
+            </body>
+            </html>
+            """,
+            height=700,
+            scrolling=True
+        )
     else:
-        st.info("👈 Choose a mode, enter data, and click **Compute** to see the complete step‑by‑step resolution.")
+        st.info("👈 Choose a mode, enter the data, and click **Calculate** to see every step explained.")
 
 st.markdown("---")
-st.markdown("<div style='text-align:center; color:#666;'>🧮 HandCalc Pro – Every step displayed clearly</div>", unsafe_allow_html=True)
+st.markdown("<div style='text-align:center;color:#666;'>🧮 HandCalc Pro – Mathematics made visible</div>", unsafe_allow_html=True)

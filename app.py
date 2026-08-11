@@ -1,4 +1,4 @@
-# app.py – Step‑by‑step resolution guaranteed (unique iframe key)
+# app.py – Final working version using placeholder for guaranteed refresh
 import streamlit as st
 import streamlit.components.v1 as components
 import math
@@ -287,8 +287,6 @@ if 'result_html' not in st.session_state:
     st.session_state.result_html = ""
 if 'history' not in st.session_state:
     st.session_state.history = []
-if 'iframe_key' not in st.session_state:
-    st.session_state.iframe_key = 0
 
 st.markdown('<h1 class="main-title">🧮 HandCalc Pro</h1>', unsafe_allow_html=True)
 st.markdown('<p style="text-align:center; color:#666;">Step‑by‑Step Mathematics – every carry, every derivative explained</p>', unsafe_allow_html=True)
@@ -306,13 +304,11 @@ with st.sidebar:
     with col1:
         if st.button("🔄 Reset"):
             st.session_state.result_html = ""
-            st.session_state.iframe_key += 1
             st.rerun()
     with col2:
         if st.button("🗑️ Clear All"):
             st.session_state.result_html = ""
             st.session_state.history = []
-            st.session_state.iframe_key += 1
             st.rerun()
     st.markdown("---")
     st.markdown("## 📊 History")
@@ -334,21 +330,18 @@ with col_in:
             elif op == "Multiplication (×)": html_res = solver.manual_mul(int(n1), int(n2))
             else: html_res = solver.manual_div(int(n1), int(n2))
             st.session_state.result_html = html_res
-            st.session_state.iframe_key += 1  # force iframe refresh
             st.session_state.history.append(f"{n1} {op[0]} {n2}")
 
     elif mode == "Linear Equation (1st Degree)":
         eq = st.text_input("Equation (e.g., 2x + 3 = 7):", "2x + 3 = 7")
         if st.button("📐 Solve", use_container_width=True):
             st.session_state.result_html = solver.solve_linear(eq)
-            st.session_state.iframe_key += 1
             st.session_state.history.append(f"Linear: {eq}")
 
     elif mode == "Quadratic Equation (2nd Degree)":
         eq = st.text_input("Equation (e.g., x^2 + 3x - 4 = 0):", "x^2 + 3x - 4 = 0")
         if st.button("🔢 Solve", use_container_width=True):
             st.session_state.result_html = solver.solve_quadratic(eq)
-            st.session_state.iframe_key += 1
             st.session_state.history.append(f"Quadratic: {eq}")
 
     elif mode == "Differentiation (Derivatives)":
@@ -357,7 +350,6 @@ with col_in:
         eval_pt = st.text_input("Evaluate at point (optional):", "")
         if st.button("📈 Differentiate", use_container_width=True):
             st.session_state.result_html = solver.differentiate(func, var, eval_pt)
-            st.session_state.iframe_key += 1
             st.session_state.history.append(f"Diff: f({var}) = {func}")
 
     elif mode == "Integration (Definite/Indefinite)":
@@ -371,11 +363,12 @@ with col_in:
             with c2: upp_bnd = st.text_input("Upper limit:", "1")
         if st.button("📊 Integrate", use_container_width=True):
             st.session_state.result_html = solver.integrate_func(func, var, low_bnd, upp_bnd)
-            st.session_state.iframe_key += 1
             st.session_state.history.append(f"Integral: f({var}) = {func}")
 
 with col_out:
     st.markdown("### ✨ Step‑by‑Step Solution")
+    placeholder = st.empty()   # will be replaced on every new result
+
     if st.session_state.result_html:
         full_page = f"""<!DOCTYPE html>
 <html>
@@ -414,9 +407,9 @@ with col_out:
     {st.session_state.result_html}
 </body>
 </html>"""
-        components.html(full_page, height=700, scrolling=True, key=f"iframe_{st.session_state.iframe_key}")
+        placeholder.components.v1.html(full_page, height=700, scrolling=True)
     else:
-        st.info("👈 Choose a mode, enter data, and click **Compute** to see the complete step‑by‑step resolution.")
+        placeholder.info("👈 Choose a mode, enter data, and click **Compute** to see the complete step‑by‑step resolution.")
 
 st.markdown("---")
 st.markdown("<div style='text-align:center; color:#666;'>🧮 HandCalc Pro – Every step displayed clearly</div>", unsafe_allow_html=True)

@@ -379,7 +379,7 @@ if menu_num == 1:
         data = subtraction_analysis_latex_detailed(minuend, subtrahend)
         st.markdown(render_subtraction_detailed_html(data), unsafe_allow_html=True)
         st.latex(f"{data['minuend_padded']} - {data['subtrahend_padded']} = {data['minuend']-data['subtrahend']}")
-        st.latex(r"\text{Hundreds } " + f"{data['h_m']} - {data['h_s']} = {data['correct_h']} \\quad \text{Tens } {data['t_m']} - {data['t_s']} = {data['correct_t']} \\quad \text{Units } {data['u_m']} - {data['u_s']} = {data['correct_u']}")
+        st.latex(rf"\text{{Hundreds }} {data['h_m']} - {data['h_s']} = {data['correct_h']} \quad \text{{Tens }} {data['t_m']} - {data['t_s']} = {data['correct_t']} \quad \text{{Units }} {data['u_m']} - {data['u_s']} = {data['correct_u']}")
 
 elif menu_num == 2:
     st.header("2. Multiplication - Detailed (LaTeX)")

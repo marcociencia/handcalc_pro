@@ -1,4 +1,9 @@
-    def solve_linear_detailed(self, eq_str):
+    def fmt_neg(self, val):
+        """Formats negative numbers for LaTeX to show -(-3) instead of --3."""
+        if val < 0:
+            return f"({val})"  # Converts -3 to (-3)
+        return f"{val}"
+            def solve_linear_detailed(self, eq_str):
         self.reset_step_count()
         try:
             if '=' not in eq_str:

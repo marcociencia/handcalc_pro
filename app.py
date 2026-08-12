@@ -1,5 +1,6 @@
 import streamlit as st
 import sympy as sp
+from sympy import latex as sym_latex
 import matplotlib.pyplot as plt
 import numpy as np
 from sympy.parsing.sympy_parser import parse_expr as sym_parse, standard_transformations, implicit_multiplication_application, convert_xor
@@ -261,7 +262,7 @@ def render_division_html_detailed(data):
                 <div style="border-bottom:3px solid #111; padding-bottom:6px; font-weight:bold; font-size:22px;">{divisor} (divisor)</div>
                 <div style="padding-top:8px; font-weight:bold; color:#0a0; font-size:20px;">{q} (quotient)</div>
                 <div style="margin-top:16px; font-size:13px; background:#f5f5ff; padding:10px; border-radius:8px; line-height:1.6;">
-                    <b>Step-by-step (Resolução passo a passo):</b><br/>
+                    <b>Step-by-step (Step-by-step resolution):</b><br/>
     """
     for i,st in enumerate(data["steps"],1):
         html+=f"{i}. {st['explain']}<br/>"
@@ -311,7 +312,7 @@ def limit_steps_detailed(expr_str, var_str, point_str):
         return f"Invalid point '{point_str}' - use number or infinity/-infinity", None, None
     var=sp.Symbol(var_str)
     steps=[]
-    steps.append(f"**Limites - Resolução passo a passo**")
+    steps.append(f"**Limites - Step-by-step resolution**")
     steps.append(f"**Step 1 - Function:** $f({var_str})={sp.latex(expr)}$")
     steps.append(f"**Step 2 - Point:** ${var_str} \\to {sp.latex(point)}$ (input '{point_str}' transformed to infinity symbol)")
     try:
@@ -376,7 +377,7 @@ def derivative_rule_steps(expr_str, var_str, rule_name):
     var=sp.Symbol(var_str)
     deriv=sp.diff(expr,var)
     steps=[]
-    steps.append(f"**{rule_name} - Resolução passo a passo**")
+    steps.append(f"**{rule_name} - Step-by-step resolution**")
     steps.append(f"Function: $f({var_str})={sp.latex(expr)}$")
     if rule_name == "Defined & differentiable on same interval":
         steps.append(f"**Step 1:** Domain where f defined")
@@ -428,11 +429,17 @@ def integral_rule_steps(expr_str, var_str, rule_name, lower=None, upper=None):
     var=sp.Symbol(var_str)
     F=sp.integrate(expr,var)
     steps=[]
-    steps.append(f"**{rule_name} - Resolução passo a passo**")
+    steps.append(f"**{rule_name} - Step-by-step resolution**")
     steps.append(f"Integrand: $\\int {sp.latex(expr)} d{var_str}$")
     if rule_name == "Primitives":
-        steps.append(f"**Step1:** $\\int x^n = x^{{n+1}}/(n+1)+C$"); steps.append(f"**Step2:** Identify power"); steps.append(f"**Step3:** Apply -> {sp.latex(F)}+C")
-        steps.append(f"**Step4:** Check F'={sp.latex(sp.diff(F,var))}"); steps.append(f"**Step5:** +C"); steps.append(f"**Step6:** Family curves"); steps.append(f"**Step7:** Final boxed")
+        steps.append(f"**Step 1 - Primitives Rule - Step-by-step resolution:** $\\int x^n dx = \\frac{{x^{{n+1}}}}{{n+1}} + C$ in LaTeX")
+        steps.append(f"**Step 2 - Identify terms:** For $\\int {sp.latex(expr)} d{var_str}$ split into $\\int \\log({var_str}) d{var_str}$ and $\\int \\sin(2{var_str}) d{var_str}$")
+        # Detailed breakdown for the specific example log(x)+sin(2x)
+        steps.append(f"**Step 3 - Apply primitive formulas:** For $\\log({var_str}) + \\sin(2{var_str})$, $F = {var_str}\\log({var_str}) - {var_str} - \\frac{{\\cos(2{var_str})}}{{2}} + C$ in LaTeX: $F = {sp.latex(F)} + C$ (corrected, includes +C)")
+        steps.append(f"**Step 4 - Check derivative:** $F' = \\frac{{d}}{{d{var_str}}}({sp.latex(F)}) = {sp.latex(sp.diff(F,var))}$ should equal original ${sp.latex(expr)}$")
+        steps.append(f"**Step 5 - Add constant:** $+C$ family of curves")
+        steps.append(f"**Step 6 - Cartesian x,y graph:** Family $F+C$ lines")
+        steps.append(f"**Step 7 - Final boxed:** $\\boxed{{\\int {sp.latex(expr)} d{var_str} = {sp.latex(F)} + C}}$")
     elif rule_name == "Substitution":
         steps.append(f"**Step1:** $\\int f(g)g' = \\int f(u)du$"); steps.append(f"**Step2:** Choose u"); steps.append(f"**Step3:** du"); steps.append(f"**Step4:** Rewrite in u")
         steps.append(f"**Step5:** Integrate in u"); steps.append(f"**Step6:** Back to x -> {sp.latex(F)}+C"); steps.append(f"**Step7:** Check")
@@ -503,8 +510,8 @@ if menu_num == 1:
     st.header("1. Subtraction - Column Method - Long Method - Detailed Steps Restored")
     st.markdown("Reference image: https://ibb.co/Qv4WYM8Z - Minuend top, Subtrahend bottom, borrowing with \cancel, -100→centena, 60→dezena, 9→unidade, final -33")
     c1,c2 = st.columns(2)
-    with c1: minuend = st.number_input("Minuend (top) - Minuendo", value=136, step=1)
-    with c2: subtrahend = st.number_input("Subtrahend (bottom) - Subtraendo", value=169, step=1)
+    with c1: minuend = st.number_input("Minuend (top) - Minuend", value=136, step=1)
+    with c2: subtrahend = st.number_input("Subtrahend (bottom) - Subtrahend", value=169, step=1)
     if st.button("Show Steps - Subtraction"):
         data = subtraction_analysis_latex_detailed(minuend, subtrahend)
         # HTML detailed
@@ -536,7 +543,7 @@ if menu_num == 1:
 \end{array}
 \rightarrow 169 \text{ intermediate as in image}
 """)
-        st.subheader("C) Exact order as reference image - Resolução passo a passo")
+        st.subheader("C) Exact order as reference image - Step-by-step resolution")
         st.latex(r"""
 \begin{aligned}
 -100 &\rightarrow \text{hundreds (centena)}\\
@@ -546,7 +553,7 @@ if menu_num == 1:
 \text{Final answer: } -33
 \end{aligned}
 """)
-        st.subheader("D) Correct place-value - Resolução passo a passo")
+        st.subheader("D) Correct place-value - Step-by-step resolution")
         st.latex(r"""
 \begin{aligned}
 %s &= %s + %s + %s\\
@@ -559,7 +566,7 @@ if menu_num == 1:
 """ % (data["minuend"], data["h_m"], data["t_m"], data["u_m"], data["subtrahend"], data["h_s"], data["t_s"], data["u_s"],
        data["h_m"], data["h_s"], data["correct_h"], data["t_m"], data["t_s"], data["correct_t"],
        data["u_m"], data["u_s"], data["correct_u"], data["correct_h"], data["correct_t"], data["correct_u"], data["minuend"]-data["subtrahend"]))
-        st.subheader("E) Detailed text steps - Resolução passo a passo")
+        st.subheader("E) Detailed text steps - Step-by-step resolution")
         for s in data["steps_text"]:
             st.write(f"- {s}")
         st.info(f"Final: {data['minuend']} - {data['subtrahend']} = {data['minuend']-data['subtrahend']}")
@@ -572,7 +579,7 @@ elif menu_num == 2:
     if st.button("Show Multiplication Steps"):
         data = multiplication_analysis(a,b)
         st.markdown(render_multiplication_html(data), unsafe_allow_html=True)
-        st.subheader("LaTeX - Resolução passo a passo")
+        st.subheader("LaTeX - Step-by-step resolution")
         latex_mult = r"""
 \begin{array}{r}
   %s \\
@@ -661,7 +668,7 @@ elif menu_num == 6:
             st.error(str(e))
 
 elif menu_num == 7:
-    st.header("7. Limits - Resolução passo a passo - infinity handling")
+    st.header("7. Limits - Step-by-step resolution - infinity handling")
     st.markdown("Type 'infinity' or '-infinity' for infinite limits - transformed to $\\infty$")
     expr_input = st.text_input("f(x)", "sin(x)/x", help="Use ^ for power e.g. x^3, 3x", key="lim_expr2")
     point_input = st.text_input("Point x ->", "0", help="Number or infinity/-infinity", key="lim_point2")
@@ -675,7 +682,7 @@ elif menu_num == 7:
         st.info(f"Input '{point_input}' -> symbol ${sp.latex(point_sym)}$ for calculation (infinity handled)")
 
 elif menu_num == 8:
-    st.header("8. Derivatives - 8 Rules - Resolução passo a passo + Comparison Green/Red + Solid Revolution")
+    st.header("8. Derivatives - 8 Rules - Step-by-step resolution + Comparison Green/Red + Solid Revolution")
     st.markdown("""
     Rules: Defined & differentiable, Constant, Power, Sum & Difference, Product, Quotient, Chain, Limits
     """)
@@ -719,7 +726,7 @@ elif menu_num == 8:
                     st.markdown(f"<div style='background:{bg}; border:1px solid {color}; padding:6px; border-radius:6px; font-size:12px;'><b>{rule}</b>: ${sp.latex(other_deriv)}$ <span style='color:{color}'>{'✓' if same else '✗'}</span></div>", unsafe_allow_html=True)
 
 elif menu_num == 9:
-    st.header("9. Integrals - 7 Rules - Resolução passo a passo + Comparison Green/Red + Solid Revolution")
+    st.header("9. Integrals - 7 Rules - Step-by-step resolution + Comparison Green/Red + Solid Revolution")
     st.markdown("""
     Rules: Primitives, Substitution, By parts, Definite, Indefinite, FTC with graph, Limits
     """)

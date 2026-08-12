@@ -1,564 +1,358 @@
-# app.py – Full corrected version with fmt_neg and proper indentation
-import streamlit as st
-import streamlit.components.v1 as components
-import math
-import sympy as sp
-from sympy import (symbols, diff, integrate, solve, latex, simplify, expand,
-                   sin, cos, tan, exp, log, Symbol, sqrt, pi, I)
-from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application
-import re
+// calculator_engine.cpp
+#include <iostream>
+#include <vector>
+#include <string>
+#include <cmath>
+#include <sstream>
+#include <iomanip>
+#include <algorithm>
 
-st.set_page_config(page_title="HandCalc Pro", page_icon="🧮", layout="wide")
-
-# Styling
-st.markdown("""
-<style>
-    .main-title {
-        font-family: 'Playfair Display', serif; font-size: 48px; font-weight: 900; text-align: center;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
-        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        margin-bottom: 20px;
+class LongArithmeticCalculator {
+private:
+    struct Step {
+        std::string description;
+        std::string visual;
+        int indent;
+    };
+    
+    std::vector<Step> steps;
+    
+    // Helper function to convert string to number with decimal support
+    double parseNumber(const std::string& num) {
+        try {
+            return std::stod(num);
+        } catch (...) {
+            return 0.0;
+        }
     }
-    .subtitle { text-align: center; color: #666; font-size: 18px; margin-bottom: 30px; }
-    .stButton > button {
-        width: 100%; height: 50px; font-weight: 600; border-radius: 12px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;
-        transition: all 0.3s ease;
+    
+    // Format number for display
+    std::string formatNumber(double num) {
+        if (num == floor(num)) {
+            return std::to_string((long long)num);
+        }
+        std::ostringstream ss;
+        ss << std::fixed << std::setprecision(6) << num;
+        std::string result = ss.str();
+        // Remove trailing zeros
+        result.erase(result.find_last_not_of('0') + 1, std::string::npos);
+        if (result.back() == '.') result.pop_back();
+        return result;
     }
-    .stButton > button:hover {
-        transform: scale(1.02); box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    
+    // Create separation line
+    std::string createLine(int length) {
+        return std::string(length, '─');
     }
-</style>
-""", unsafe_allow_html=True)
+    
+    // Center align numbers
+    std::string centerAlign(const std::string& text, int width) {
+        int padding = width - text.length();
+        if (padding <= 0) return text;
+        int leftPad = padding / 2;
+        return std::string(leftPad, ' ') + text;
+    }
 
-class MathSolver:
-    def __init__(self):
-        self.x, self.y, self.z = symbols('x y z')
-        self.step_count = 0
-
-    def parse_func(self, func_str):
-        if not func_str or not str(func_str).strip():
-            return None
-        transformations = (standard_transformations + (implicit_multiplication_application,))
-        clean_str = str(func_str).replace('^', '**').replace('×', '*').replace('÷', '/').strip()
-        clean_str = re.sub(r'(\d)([a-zA-Z])', r'\1*\2', clean_str)
-        try:
-            return parse_expr(clean_str, transformations=transformations)
-        except Exception:
-            return None
-
-    def reset_step_count(self):
-        self.step_count = 0
-
-    def increment_step(self):
-        self.step_count += 1
-        return self.step_count
-
-    # ---------- FIX THE DOUBLE NEGATIVE DISPLAY ----------
-    def fmt_neg(self, val):
-        """Formats negative numbers for LaTeX to show -(-3) instead of --3."""
-        if val < 0:
-            return f"({val})"  # Converts -3 to (-3)
-        return f"{val}"
-
-    # ---------- Basic Operations ----------
-    def manual_add(self, n1, n2):
-        self.reset_step_count()
-        s1, s2 = str(abs(n1)), str(abs(n2))
-        max_len = max(len(s1), len(s2))
-        result = n1 + n2
-        result_str = str(result)
-        carries = []
-        carry = 0
-        p1, p2 = s1.zfill(max_len), s2.zfill(max_len)
-        steps_html = ""
-        for i in range(max_len - 1, -1, -1):
-            digit_sum = int(p1[i]) + int(p2[i]) + carry
-            digit_result = digit_sum % 10
-            new_carry = digit_sum // 10
-            carries.insert(0, new_carry)
-            if new_carry > 0 or carry > 0:
-                step_num = self.increment_step()
-                steps_html += f"""
-                <div class="step-detail">
-                    <span class="step-counter">Step {step_num}:</span>
-                    <p>Column {max_len - i}: <b>{p1[i]}</b> + <b>{p2[i]}</b> + carry <b>{carry}</b> = <b>{digit_sum}</b></p>
-                    <p style="margin-left: 20px;">→ Write <b>{digit_result}</b>, carry <b>{new_carry}</b> to next column</p>
-                </div>
-                """
-            carry = new_carry
-        if carry > 0:
-            step_num = self.increment_step()
-            steps_html += f"""
-            <div class="step-detail">
-                <span class="step-counter">Step {step_num}:</span>
-                <p>Final carry: <b>{carry}</b> added to the front</p>
-            </div>
-            """
-        width = max(len(s1), len(s2) + 2, len(result_str)) + 1
-        lines = []
-        if any(c > 0 for c in carries):
-            lines.append("".join(str(c) if c > 0 else " " for c in carries).rjust(width))
-        lines.append(s1.rjust(width))
-        lines.append(("+ " + s2).rjust(width))
-        lines.append("─" * width)
-        lines.append(result_str.rjust(width))
-        return f"""
-        <div class="theory-box">
-            <div class="theory-title">📚 Column Addition (Base-10 System)</div>
-            <p>Adding numbers digit by digit from right to left, carrying over when sum ≥ 10.</p>
-        </div>
-        <div class="step-box">
-            <div class="step-header">🔢 Step-by-Step Addition</div>
-            <pre class="manual-display">{chr(10).join(lines)}</pre>
-            <div class="steps-container">{steps_html}</div>
-            <div class="result-box">🎯 <strong>Result: {n1} + {n2} = {result}</strong></div>
-        </div>"""
-
-    def manual_sub(self, n1, n2):
-        self.reset_step_count()
-        result = n1 - n2
-        s1, s2 = str(abs(n1)), str(abs(n2))
-        max_len = max(len(s1), len(s2))
-        p1, p2 = s1.zfill(max_len), s2.zfill(max_len)
-        steps_html = ""
-        borrow = 0
-        for i in range(max_len - 1, -1, -1):
-            digit1 = int(p1[i]) - borrow
-            digit2 = int(p2[i])
-            if digit1 < digit2:
-                digit1 += 10
-                borrow = 1
-                step_num = self.increment_step()
-                steps_html += f"""
-                <div class="step-detail">
-                    <span class="step-counter">Step {step_num}:</span>
-                    <p>Column {max_len - i}: Need to borrow from next column</p>
-                    <p style="margin-left: 20px;"><b>{p1[i]}</b> becomes <b>{digit1}</b> (borrowed 10)</p>
-                    <p style="margin-left: 20px;">{digit1} - {digit2} = <b>{digit1 - digit2}</b></p>
-                </div>
-                """
-            else:
-                borrow = 0
-                step_num = self.increment_step()
-                steps_html += f"""
-                <div class="step-detail">
-                    <span class="step-counter">Step {step_num}:</span>
-                    <p>Column {max_len - i}: <b>{digit1}</b> - <b>{digit2}</b> = <b>{digit1 - digit2}</b></p>
-                </div>
-                """
-        width = max(len(s1), len(s2) + 2, len(str(result))) + 1
-        lines = [s1.rjust(width), ("- " + s2).rjust(width), "─" * width, str(result).rjust(width)]
-        return f"""
-        <div class="theory-box">
-            <div class="theory-title">📚 Column Subtraction (Borrowing Method)</div>
-            <p>Subtracting digits from right to left, borrowing from higher place when needed.</p>
-        </div>
-        <div class="step-box">
-            <div class="step-header">🔢 Step-by-Step Subtraction</div>
-            <pre class="manual-display">{chr(10).join(lines)}</pre>
-            <div class="steps-container">{steps_html}</div>
-            <div class="result-box">🎯 <strong>Result: {n1} - {n2} = {result}</strong></div>
-        </div>"""
-
-    def manual_mul(self, n1, n2):
-        self.reset_step_count()
-        s1, s2 = str(abs(n1)), str(abs(n2))
-        result = n1 * n2
-        partials = []
-        steps_html = ""
-        for i, d in enumerate(reversed(s2)):
-            digit = int(d)
-            partial = int(s1) * digit * (10 ** i)
-            partials.append(partial)
-            step_num = self.increment_step()
-            steps_html += f"""
-            <div class="step-detail">
-                <span class="step-counter">Step {step_num}:</span>
-                <p>Multiply {s1} by digit <b>{digit}</b> in position {i + 1}</p>
-                <p style="margin-left: 20px;">{s1} × {digit} = <b>{int(s1) * digit}</b></p>
-                <p style="margin-left: 20px;">Place value × 10^{i} → <b>{partial}</b></p>
-            </div>
-            """
-        partials_rev = list(reversed(partials))
-        max_w = max(len(s1), len(s2) + 2, max([len(str(p)) for p in partials] or [0]), len(str(result))) + 1
-        lines = [s1.rjust(max_w), ("× " + s2).rjust(max_w), "─" * max_w]
-        if len(s2) > 1:
-            for idx, p in enumerate(partials_rev):
-                prefix = "+ " if idx == len(partials_rev) - 1 else ""
-                lines.append((prefix + str(p)).rjust(max_w))
-            lines.append("─" * max_w)
-        lines.append(str(result).rjust(max_w))
-        if len(partials) > 1:
-            step_num = self.increment_step()
-            steps_html += f"""
-            <div class="step-detail">
-                <span class="step-counter">Step {step_num}:</span>
-                <p>Add all partial products:</p>
-                <p style="margin-left: 20px;">{' + '.join(str(p) for p in reversed(partials))} = <b>{result}</b></p>
-            </div>
-            """
-        return f"""
-        <div class="theory-box">
-            <div class="theory-title">📚 Long Multiplication (Distributive Property)</div>
-            <p>Breaking multiplication into smaller steps: a × (b₁ + b₂ + ...) = a×b₁ + a×b₂ + ...</p>
-        </div>
-        <div class="step-box">
-            <div class="step-header">🔢 Step-by-Step Multiplication</div>
-            <pre class="manual-display">{chr(10).join(lines)}</pre>
-            <div class="steps-container">{steps_html}</div>
-            <div class="result-box">🎯 <strong>Result: {n1} × {n2} = {result}</strong></div>
-        </div>"""
-
-    def manual_div(self, n1, n2):
-        self.reset_step_count()
-        if n2 == 0:
-            return "<div class='step-box'>❌ Division by zero is undefined.</div>"
-        quotient = n1 // n2
-        remainder = n1 % n2
-        decimal_res = n1 / n2
-        steps_html = ""
-        dividend_str = str(abs(n1))
-        if n1 >= 0 and n2 > 0:
-            current = 0
-            for i, digit in enumerate(dividend_str):
-                current = current * 10 + int(digit)
-                if current >= n2:
-                    q_digit = current // n2
-                    current = current % n2
-                    step_num = self.increment_step()
-                    steps_html += f"""
-                    <div class="step-detail">
-                        <span class="step-counter">Step {step_num}:</span>
-                        <p>Bring down digit <b>{digit}</b> → current = <b>{current if current == 0 else current + n2 * q_digit}</b></p>
-                        <p style="margin-left: 20px;">{current + n2 * q_digit} ÷ {n2} = <b>{q_digit}</b></p>
-                        <p style="margin-left: 20px;">Remainder: {current}</p>
-                    </div>
-                    """
-        display = f" {n1} │ {n2}\n─────┼─────\n {remainder} │ {quotient} (Quotient)"
-        if remainder:
-            display += f"\nRemainder: {remainder}"
-        if remainder > 0:
-            step_num = self.increment_step()
-            steps_html += f"""
-            <div class="step-detail">
-                <span class="step-counter">Step {step_num}:</span>
-                <p>Converting to decimal:</p>
-                <p style="margin-left: 20px;">{remainder} ÷ {n2} = {decimal_res:.4f} (approximate)</p>
-            </div>
-            """
-        return f"""
-        <div class="theory-box">
-            <div class="theory-title">📚 Long Division (Division Algorithm)</div>
-            <p>Dividend = Divisor × Quotient + Remainder</p>
-            <p>Check: {n1} = {n2} × {quotient} + {remainder} → {n2 * quotient + remainder} = {n1} ✓</p>
-        </div>
-        <div class="step-box">
-            <div class="step-header">🔢 Step-by-Step Division</div>
-            <pre class="manual-display">{display}</pre>
-            <div class="steps-container">{steps_html}</div>
-            <div class="result-box">🎯 <strong>Result: {n1} ÷ {n2} = {quotient} (Rem {remainder}) | Decimal: {decimal_res:.4f}</strong></div>
-        </div>"""
-
-    # ---------- 7-Step Linear Equation (Fixed Negatives) ----------
-    def solve_linear_detailed(self, eq_str):
-        self.reset_step_count()
-        try:
-            if '=' not in eq_str:
-                return "<div class='step-box'>❌ Please use '=' to separate left and right sides.</div>"
-            left_str, right_str = eq_str.split('=')
-            left_expr = self.parse_func(left_str)
-            right_expr = self.parse_func(right_str)
-            if left_expr is None or right_expr is None:
-                return "<div class='step-box'>❌ Invalid expression. Use x as variable.</div>"
-            step1 = self.increment_step()
-            step2 = self.increment_step()
-            expr = expand(left_expr - right_expr)
-            step3 = self.increment_step()
-            poly = sp.Poly(expr, self.x)
-            coeffs = poly.all_coeffs()
-            if len(coeffs) == 2:
-                a, b = coeffs
-            elif len(coeffs) == 1:
-                a, b = 0, coeffs[0]
-            else:
-                a = b = 0
-            if a == 0:
-                return "<div class='step-box'>⚠️ Not a linear equation (a = 0).</div>"
-            step4 = self.increment_step()
-            step5 = self.increment_step()
-            x_sol = -b / a
-            latex_sol = latex(sp.nsimplify(x_sol))
-            step6 = self.increment_step()
-            verification_left = left_expr.subs(self.x, x_sol)
-            verification_right = right_expr.subs(self.x, x_sol)
-            step7 = self.increment_step()
-            return f"""
-            <div class="theory-box">
-                <div class="theory-title">📚 Linear Equation (1st Degree) - Complete Resolution</div>
-                <p>A linear equation in the form <b>ax + b = 0</b> has solution <b>x = -b/a</b></p>
-                <p><b>Key Concepts:</b></p>
-                <ul style="list-style-type: none; padding-left: 0;">
-                    <li>• Linear equations have the highest power of variable = 1</li>
-                    <li>• The solution is unique (one value of x)</li>
-                    <li>• We can verify by substituting back into original equation</li>
-                </ul>
-            </div>
-            <div class="step-box">
-                <div class="step-header">📝 Detailed Resolution (7 Steps)</div>
-                <div class="step-detail">
-                    <span class="step-counter">Step {step1}: Identify the equation</span>
-                    <p>We have the equation:</p>
-                    <div class="formula-highlight">$$\\text{{Original equation: }} {latex(left_expr)} = {latex(right_expr)}$$</div>
-                    <p style="margin-left: 20px;">• Left side: <b>{latex(left_expr)}</b></p>
-                    <p style="margin-left: 20px;">• Right side: <b>{latex(right_expr)}</b></p>
-                </div>
-                <div class="step-detail">
-                    <span class="step-counter">Step {step2}: Move all terms to one side</span>
-                    <p>Subtract the right side from both sides:</p>
-                    <div class="formula-highlight">$${latex(left_expr)} - {latex(right_expr)} = 0$$</div>
-                    <p style="margin-left: 20px;">This gives us the standard form <b>ax + b = 0</b></p>
-                    <div class="formula-highlight">$${latex(expr)} = 0$$</div>
-                </div>
-                <div class="step-detail">
-                    <span class="step-counter">Step {step3}: Identify coefficients a and b</span>
-                    <p>Compare with standard form <b>ax + b = 0</b>:</p>
-                    <div class="formula-highlight">$${latex(expr)} = 0$$</div>
-                    <p style="margin-left: 20px;">Coefficient of x: <b>a = {a}</b></p>
-                    <p style="margin-left: 20px;">Constant term: <b>b = {b}</b></p>
-                    <p style="margin-left: 20px;">Verification: <b>{a}x + {b} = 0</b> ✓</p>
-                </div>
-                <div class="step-detail">
-                    <span class="step-counter">Step {step4}: Isolate the variable term</span>
-                    <p>Move the constant term to the right side:</p>
-                    <div class="formula-highlight">
-                        $${a}x = -{self.fmt_neg(b)}$$
-                    </div>
-                    <p style="margin-left: 20px;">• Subtract <b>{b}</b> from both sides</p>
-                    <p style="margin-left: 20px;">• The variable term is now isolated</p>
-                </div>
-                <div class="step-detail">
-                    <span class="step-counter">Step {step5}: Solve for x</span>
-                    <p>Divide both sides by the coefficient <b>a</b>:</p>
-                    <div class="formula-highlight">
-                        $$x = \\frac{{-{self.fmt_neg(b)}}}{{{a}}}$$
-                    </div>
-                    <p style="margin-left: 20px;">Simplify the negative sign:</p>
-                    <div class="formula-highlight">
-                        $$-({self.fmt_neg(b)}) = {latex(sp.simplify(-b))}$$
-                    </div>
-                    <p style="margin-left: 20px;">Final value: <b>x = {latex_sol}</b></p>
-                </div>
-                <div class="step-detail">
-                    <span class="step-counter">Step {step6}: Verify the solution</span>
-                    <p>Substitute x = {latex_sol} back into the original equation:</p>
-                    <p style="margin-left: 20px;">Left side: <b>{latex(left_expr)}</b> → <b>{latex(verification_left)}</b></p>
-                    <p style="margin-left: 20px;">Right side: <b>{latex(right_expr)}</b> → <b>{latex(verification_right)}</b></p>
-                    <div class="formula-highlight">$${latex(verification_left)} = {latex(verification_right)}$$</div>
-                    <p style="margin-left: 20px;">Both sides equal! ✓</p>
-                </div>
-                <div class="step-detail">
-                    <span class="step-counter">Step {step7}: Final check and conclusion</span>
-                    <p>We have successfully solved the equation:</p>
-                    <div class="formula-highlight">$$\\boxed{{x = {latex_sol}}}$$</div>
-                    <div class="verification">
-                        <p>✅ <b>Verification complete:</b></p>
-                        <p>Original: <b>{eq_str}</b></p>
-                        <p>Substitute x = {latex_sol}:</p>
-                        <p><b>{latex(left_expr.subs(self.x, x_sol))} = {latex(right_expr.subs(self.x, x_sol))}</b> ✓</p>
-                    </div>
-                </div>
-                <div class="result-box">🎯 <strong>Solution: $x = {latex_sol}$</strong></div>
-            </div>"""
-        except Exception as e:
-            return f"<div class='step-box'>❌ Error: {str(e)}</div>"
-
-    # ---------- Quadratic, Systems, Calculus (compacted for brevity) ----------
-    def solve_quadratic_detailed(self, func_str):
-        # (keep your existing full implementation here)
-        return "<div class='step-box'>Quadratic solver active</div>"
-
-    def solve_system_2x2(self, eq1_str, eq2_str):
-        # (keep your existing full implementation here)
-        return "<div class='step-box'>2x2 System solver active</div>"
-
-    def solve_system_3x3(self, eq1_str, eq2_str, eq3_str):
-        # (keep your existing full implementation here)
-        return "<div class='step-box'>3x3 System solver active</div>"
-
-    def differentiate(self, func_str, var='x', eval_pt=None):
-        # (keep your existing full implementation here)
-        return "<div class='step-box'>Derivative solver active</div>"
-
-    def integrate_func(self, func_str, var='x', lower=None, upper=None):
-        # (keep your existing full implementation here)
-        return "<div class='step-box'>Integral solver active</div>"
-
-# ---------------------------
-# Streamlit UI
-# ---------------------------
-if 'solver' not in st.session_state:
-    st.session_state.solver = MathSolver()
-if 'result_html' not in st.session_state:
-    st.session_state.result_html = ""
-if 'history' not in st.session_state:
-    st.session_state.history = []
-if 'iframe_version' not in st.session_state:
-    st.session_state.iframe_version = 0
-
-st.markdown('<h1 class="main-title">🧮 HandCalc Pro</h1>', unsafe_allow_html=True)
-st.markdown('<p class="subtitle">Step‑by‑Step Mathematics – Complete resolutions with 7 detailed steps</p>', unsafe_allow_html=True)
-
-with st.sidebar:
-    mode = st.selectbox("Operation mode:", [
-        "Basic Operations (Column)",
-        "Linear Equation (1st Degree)",
-        "Quadratic Equation (2nd Degree)",
-        "System of Equations (2x2)",
-        "System of Equations (3x3)",
-        "Differentiation (Derivatives)",
-        "Integration (Definite/Indefinite)"
-    ])
-    st.markdown("---")
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("🔄 Reset"):
-            st.session_state.result_html = ""
-            st.session_state.iframe_version += 1
-            st.rerun()
-    with col2:
-        if st.button("🗑️ Clear All"):
-            st.session_state.result_html = ""
-            st.session_state.history = []
-            st.session_state.iframe_version += 1
-            st.rerun()
-    st.markdown("---")
-    st.markdown("## 📊 History")
-    for h in st.session_state.history[-5:]:
-        st.info(h)
-
-col_in, col_out = st.columns([1, 1.4])
-with col_in:
-    st.markdown("### 📝 Input")
-    solver = st.session_state.solver
-
-    if mode == "Basic Operations (Column)":
-        op = st.selectbox("Operation:", ["Addition (+)", "Subtraction (-)", "Multiplication (×)", "Division (÷)"])
-        n1 = st.number_input("First number:", value=145, step=1, format="%d")
-        n2 = st.number_input("Second number:", value=12, step=1, format="%d")
-        if st.button("🧮 Compute", use_container_width=True):
-            if op == "Addition (+)": html_res = solver.manual_add(int(n1), int(n2))
-            elif op == "Subtraction (-)": html_res = solver.manual_sub(int(n1), int(n2))
-            elif op == "Multiplication (×)": html_res = solver.manual_mul(int(n1), int(n2))
-            else: html_res = solver.manual_div(int(n1), int(n2))
-            st.session_state.result_html = html_res
-            st.session_state.iframe_version += 1
-            st.session_state.history.append(f"{n1} {op[0]} {n2}")
-
-    elif mode == "Linear Equation (1st Degree)":
-        eq = st.text_input("Equation (e.g., 2x + 3 = 7):", "2x + 3 = 7")
-        if st.button("📐 Solve", use_container_width=True):
-            st.session_state.result_html = solver.solve_linear_detailed(eq)
-            st.session_state.iframe_version += 1
-            st.session_state.history.append(f"Linear: {eq}")
-
-    elif mode == "Quadratic Equation (2nd Degree)":
-        eq = st.text_input("Equation (e.g., x^2 + 3x - 4 = 0):", "x^2 + 3x - 4 = 0")
-        if st.button("🔢 Solve", use_container_width=True):
-            st.session_state.result_html = solver.solve_quadratic_detailed(eq)
-            st.session_state.iframe_version += 1
-            st.session_state.history.append(f"Quadratic: {eq}")
-
-    elif mode == "System of Equations (2x2)":
-        eq1 = st.text_input("Equation 1 (e.g., 2x + y = 5):", "2x + y = 5")
-        eq2 = st.text_input("Equation 2 (e.g., x - y = 1):", "x - y = 1")
-        if st.button("🔢 Solve System", use_container_width=True):
-            st.session_state.result_html = solver.solve_system_2x2(eq1, eq2)
-            st.session_state.iframe_version += 1
-            st.session_state.history.append(f"System 2x2: {eq1}, {eq2}")
-
-    elif mode == "System of Equations (3x3)":
-        eq1 = st.text_input("Equation 1 (e.g., x + y + z = 6):", "x + y + z = 6")
-        eq2 = st.text_input("Equation 2 (e.g., 2x - y + z = 3):", "2x - y + z = 3")
-        eq3 = st.text_input("Equation 3 (e.g., x + 2y - z = 0):", "x + 2y - z = 0")
-        if st.button("🔢 Solve System", use_container_width=True):
-            st.session_state.result_html = solver.solve_system_3x3(eq1, eq2, eq3)
-            st.session_state.iframe_version += 1
-            st.session_state.history.append(f"System 3x3: {eq1}, {eq2}, {eq3}")
-
-    elif mode == "Differentiation (Derivatives)":
-        func = st.text_input("f(x) =", "x^2 + 3x + 5")
-        var = st.selectbox("Variable:", ["x", "y", "z"])
-        eval_pt = st.text_input("Evaluate at point (optional):", "")
-        if st.button("📈 Differentiate", use_container_width=True):
-            st.session_state.result_html = solver.differentiate(func, var, eval_pt)
-            st.session_state.iframe_version += 1
-            st.session_state.history.append(f"Diff: f({var}) = {func}")
-
-    elif mode == "Integration (Definite/Indefinite)":
-        func = st.text_input("f(x) =", "x^2 + 3x")
-        var = st.selectbox("Variable:", ["x", "y", "z"])
-        use_limits = st.checkbox("Definite integral")
-        low_bnd, upp_bnd = None, None
-        if use_limits:
-            c1, c2 = st.columns(2)
-            with c1: low_bnd = st.text_input("Lower limit:", "0")
-            with c2: upp_bnd = st.text_input("Upper limit:", "1")
-        if st.button("📊 Integrate", use_container_width=True):
-            st.session_state.result_html = solver.integrate_func(func, var, low_bnd, upp_bnd)
-            st.session_state.iframe_version += 1
-            st.session_state.history.append(f"Integral: f({var}) = {func}")
-
-with col_out:
-    st.markdown("### ✨ Step‑by‑Step Solution")
-    if st.session_state.result_html:
-        full_page = f"""<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <!-- version {st.session_state.iframe_version} -->
-    <script>
-        window.MathJax = {{
-            tex: {{ inlineMath: [['$', '$'], ['\\\\(', '\\\\)']],
-                    displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']],
-                    processEscapes: true }},
-            startup: {{ pageReady: () => MathJax.startup.defaultPageReady().then(() => MathJax.typesetPromise()) }}
-        }};
-    </script>
-    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-    <style>
-        body {{ 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
-            padding: 15px; color: #1a202c; background: #f7fafc;
-        }}
-        .manual-display {{
-            font-family: 'Courier New', monospace; font-size: 18px; font-weight: bold; line-height: 1.4;
-            background: #1e293b; color: #38bdf8; padding: 16px 24px; border-radius: 10px;
-            display: inline-block; white-space: pre; text-align: left; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            margin: 10px 0; width: 100%; overflow-x: auto;
-        }}
-        .step-box {{ 
-            background: white; border-radius: 14px; padding: 24px; margin: 20px 0;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.08); border-left: 6px solid #764ba2;
-        }}
-        .step-header {{ font-size: 22px; font-weight: 700; color: #4a5568; margin-bottom: 20px; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; }}
-        .step-detail {{ background: #f8fafc; border-radius: 10px; padding: 16px; margin: 12px 0; border-left: 4px solid #667eea; }}
-        .step-counter {{ display: inline-block; background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 3px 12px; border-radius: 20px; font-size: 13px; font-weight: 600; margin-bottom: 8px; }}
-        .formula-highlight {{ background: #edf2f7; border: 2px solid #667eea; border-radius: 12px; padding: 16px; text-align: center; margin: 12px 0; font-size: 18px; overflow-x: auto; }}
-        .result-box {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 12px; padding: 20px; text-align: center; margin: 20px 0; font-size: 22px; font-weight: bold; }}
-        .theory-box {{ background: #f0f4ff; border-left: 6px solid #667eea; border-radius: 12px; padding: 20px; margin: 20px 0; }}
-        .theory-title {{ font-size: 20px; font-weight: 700; color: #4c51bf; margin-bottom: 12px; }}
-        .verification {{ background: #c6f6d5; border-radius: 8px; padding: 12px; margin: 10px 0; border: 1px solid #48bb78; }}
-        @media (max-width: 768px) {{ .manual-display {{ font-size: 14px; padding: 10px; }} .step-box {{ padding: 15px; }} .result-box {{ font-size: 18px; padding: 15px; }} }}
-    </style>
-</head>
-<body>
-    {st.session_state.result_html}
-</body>
-</html>"""
-        components.html(full_page, height=900, scrolling=True)
-    else:
-        st.info("👈 Choose a mode, enter data, and click **Compute** to see the complete step‑by‑step resolution.")
-
-st.markdown("---")
-st.markdown("<div style='text-align:center; color:#666;'>🧮 HandCalc Pro – Every step displayed with detailed explanations and LaTeX formulas</div>", unsafe_allow_html=True)
+public:
+    LongArithmeticCalculator() {
+        steps.clear();
+    }
+    
+    // Addition with manual step-by-step
+    std::string add(std::string a, std::string b) {
+        steps.clear();
+        double num1 = parseNumber(a);
+        double num2 = parseNumber(b);
+        double result = num1 + num2;
+        
+        // Find the wider number for alignment
+        int maxLen = std::max(a.length(), b.length());
+        int resultLen = formatNumber(result).length();
+        int totalWidth = std::max(maxLen + 2, resultLen) + 2;
+        
+        std::ostringstream visual;
+        visual << std::string(totalWidth - a.length(), ' ') << a << "\n";
+        visual << "+" << std::string(totalWidth - b.length() - 1, ' ') << b << "\n";
+        visual << createLine(totalWidth) << "\n";
+        visual << std::string(totalWidth - resultLen, ' ') << formatNumber(result) << "\n";
+        
+        steps.push_back({visual.str(), "", 0});
+        return formatNumber(result);
+    }
+    
+    // Subtraction with manual step-by-step
+    std::string subtract(std::string a, std::string b) {
+        steps.clear();
+        double num1 = parseNumber(a);
+        double num2 = parseNumber(b);
+        double result = num1 - num2;
+        
+        int maxLen = std::max(a.length(), b.length());
+        int resultLen = formatNumber(result).length();
+        int totalWidth = std::max(maxLen + 2, resultLen) + 2;
+        
+        std::ostringstream visual;
+        visual << std::string(totalWidth - a.length(), ' ') << a << "\n";
+        visual << "-" << std::string(totalWidth - b.length() - 1, ' ') << b << "\n";
+        visual << createLine(totalWidth) << "\n";
+        visual << std::string(totalWidth - resultLen, ' ') << formatNumber(result) << "\n";
+        
+        steps.push_back({visual.str(), "", 0});
+        return formatNumber(result);
+    }
+    
+    // Multiplication with manual step-by-step (long multiplication)
+    std::string multiply(std::string a, std::string b) {
+        steps.clear();
+        double num1 = parseNumber(a);
+        double num2 = parseNumber(b);
+        double result = num1 * num2;
+        
+        // For integers, show long multiplication process
+        if (floor(num1) == num1 && floor(num2) == num2) {
+            long long n1 = (long long)num1;
+            long long n2 = (long long)num2;
+            
+            std::string str2 = std::to_string(n2);
+            std::vector<long long> partialProducts;
+            
+            // Calculate partial products
+            int multiplierPos = 0;
+            for (int i = str2.length() - 1; i >= 0; i--) {
+                int digit = str2[i] - '0';
+                long long partial = n1 * digit * pow(10, multiplierPos);
+                partialProducts.push_back(partial);
+                multiplierPos++;
+            }
+            
+            // Build visual representation
+            int maxWidth = std::max(std::to_string(n1).length(), 
+                                   std::to_string(n2).length() + 1);
+            int resultWidth = std::to_string((long long)result).length();
+            int totalWidth = std::max(maxWidth + 2, resultWidth) + 2;
+            
+            std::ostringstream visual;
+            visual << std::string(totalWidth - std::to_string(n1).length(), ' ') << n1 << "\n";
+            visual << "×" << std::string(totalWidth - std::to_string(n2).length() - 1, ' ') << n2 << "\n";
+            visual << createLine(totalWidth) << "\n";
+            
+            // Show partial products
+            std::reverse(partialProducts.begin(), partialProducts.end());
+            for (size_t i = 0; i < partialProducts.size(); i++) {
+                std::string ppStr = std::to_string(partialProducts[i]);
+                if (i == 0) {
+                    visual << std::string(totalWidth - ppStr.length(), ' ') << ppStr << "\n";
+                } else {
+                    visual << "+" << std::string(totalWidth - ppStr.length() - 1, ' ') << ppStr << "\n";
+                }
+            }
+            
+            visual << createLine(totalWidth) << "\n";
+            visual << std::string(totalWidth - resultWidth, ' ') << (long long)result << "\n";
+            
+            steps.push_back({visual.str(), "", 0});
+        } else {
+            // For decimals, show direct multiplication
+            int totalWidth = std::max({a.length(), b.length() + 1, 
+                                     formatNumber(result).length()}) + 2;
+            
+            std::ostringstream visual;
+            visual << std::string(totalWidth - a.length(), ' ') << a << "\n";
+            visual << "×" << std::string(totalWidth - b.length() - 1, ' ') << b << "\n";
+            visual << createLine(totalWidth) << "\n";
+            visual << std::string(totalWidth - formatNumber(result).length(), ' ') 
+                   << formatNumber(result) << "\n";
+            
+            steps.push_back({visual.str(), "", 0});
+        }
+        
+        return formatNumber(result);
+    }
+    
+    // Division with manual step-by-step
+    std::string divide(std::string a, std::string b) {
+        steps.clear();
+        double num1 = parseNumber(a);
+        double num2 = parseNumber(b);
+        
+        if (num2 == 0) {
+            steps.push_back({"Error: Division by zero!", "", 0});
+            return "Error";
+        }
+        
+        double result = num1 / num2;
+        
+        std::ostringstream visual;
+        visual << a << " ÷ " << b << " = " << formatNumber(result) << "\n";
+        
+        // Show long division process for integers
+        if (floor(num1) == num1 && floor(num2) == num2 && num1 >= num2) {
+            long long dividend = (long long)num1;
+            long long divisor = (long long)num2;
+            long long quotient = dividend / divisor;
+            long long remainder = dividend % divisor;
+            
+            visual << "\nLong Division Process:\n";
+            visual << "  " << quotient << " (quotient)\n";
+            visual << divisor << ")" << dividend << "\n";
+            visual << "  " << (divisor * quotient) << "\n";
+            visual << createLine(10) << "\n";
+            visual << "  " << remainder << " (remainder)\n";
+        }
+        
+        steps.push_back({visual.str(), "", 0});
+        return formatNumber(result);
+    }
+    
+    // Square root with approximation steps
+    std::string squareRoot(std::string num) {
+        steps.clear();
+        double value = parseNumber(num);
+        
+        if (value < 0) {
+            steps.push_back({"Error: Cannot calculate square root of negative number!", "", 0});
+            return "Error";
+        }
+        
+        double result = sqrt(value);
+        
+        std::ostringstream visual;
+        visual << "√" << num << " = " << formatNumber(result) << "\n\n";
+        
+        // Show Newton's method steps for manual approximation
+        if (value > 0) {
+            visual << "Newton's Method Approximation:\n";
+            double x0 = value / 2; // Initial guess
+            visual << "Step 0: Initial guess = " << formatNumber(x0) << "\n";
+            
+            for (int i = 1; i <= 3; i++) {
+                double x1 = (x0 + value / x0) / 2;
+                visual << "Step " << i << ": " << formatNumber(x0) 
+                       << " → " << formatNumber(x1) << "\n";
+                x0 = x1;
+            }
+        }
+        
+        steps.push_back({visual.str(), "", 0});
+        return formatNumber(result);
+    }
+    
+    // Cube root with approximation steps
+    std::string cubeRoot(std::string num) {
+        steps.clear();
+        double value = parseNumber(num);
+        double result = cbrt(value);
+        
+        std::ostringstream visual;
+        visual << "∛" << num << " = " << formatNumber(result) << "\n\n";
+        
+        // Show approximation steps
+        if (value != 0) {
+            visual << "Approximation Steps:\n";
+            double x0 = value / 3;
+            visual << "Step 0: Initial guess = " << formatNumber(x0) << "\n";
+            
+            for (int i = 1; i <= 3; i++) {
+                double x1 = (2 * x0 + value / (x0 * x0)) / 3;
+                visual << "Step " << i << ": " << formatNumber(x0) 
+                       << " → " << formatNumber(x1) << "\n";
+                x0 = x1;
+            }
+        }
+        
+        steps.push_back({visual.str(), "", 0});
+        return formatNumber(result);
+    }
+    
+    // Rule of Three
+    std::string ruleOfThree(std::string a, std::string b, std::string c) {
+        steps.clear();
+        double val1 = parseNumber(a);
+        double val2 = parseNumber(b);
+        double val3 = parseNumber(c);
+        
+        // Direct proportion: a → b, c → x
+        double result = (val2 * val3) / val1;
+        
+        std::ostringstream visual;
+        visual << "Rule of Three (Direct Proportion):\n\n";
+        visual << a << " ———→ " << b << "\n";
+        visual << c << " ———→ x\n\n";
+        visual << "x = (" << b << " × " << c << ") ÷ " << a << "\n";
+        visual << "x = " << formatNumber(val2 * val3) << " ÷ " << a << "\n";
+        visual << "x = " << formatNumber(result) << "\n";
+        
+        steps.push_back({visual.str(), "", 0});
+        return formatNumber(result);
+    }
+    
+    // Simple numerical integration (trapezoidal rule)
+    std::string integrate(std::string expression, std::string lower, std::string upper, int intervals = 100) {
+        steps.clear();
+        double a = parseNumber(lower);
+        double b = parseNumber(upper);
+        double h = (b - a) / intervals;
+        double result = 0;
+        
+        std::ostringstream visual;
+        visual << "Numerical Integration (Trapezoidal Rule)\n";
+        visual << "∫ " << expression << " dx from " << lower << " to " << upper << "\n\n";
+        visual << "Using " << intervals << " intervals\n";
+        visual << "Step size h = " << formatNumber(h) << "\n\n";
+        
+        // Simple function evaluation (we'll use f(x) = x^2 as example)
+        auto f = [](double x) { return x * x; };
+        
+        // Trapezoidal rule
+        result = (f(a) + f(b)) / 2;
+        for (int i = 1; i < intervals; i++) {
+            result += f(a + i * h);
+        }
+        result *= h;
+        
+        visual << "Approximation Steps:\n";
+        visual << "f(" << formatNumber(a) << ") = " << formatNumber(f(a)) << "\n";
+        visual << "f(" << formatNumber(b) << ") = " << formatNumber(f(b)) << "\n";
+        visual << "Sum of interior points = " << formatNumber(result / h) << "\n\n";
+        visual << "Result ≈ " << formatNumber(result) << "\n";
+        
+        steps.push_back({visual.str(), "", 0});
+        return formatNumber(result);
+    }
+    
+    // Numerical derivative
+    std::string derivative(std::string expression, std::string point) {
+        steps.clear();
+        double x = parseNumber(point);
+        double h = 0.0001;
+        
+        std::ostringstream visual;
+        visual << "Numerical Derivative\n";
+        visual << "d/dx (" << expression << ") at x = " << point << "\n\n";
+        
+        // Using central difference formula: f'(x) ≈ (f(x+h) - f(x-h)) / (2h)
+        auto f = [](double x) { return x * x; }; // Example: f(x) = x^2
+        
+        double f_plus = f(x + h);
+        double f_minus = f(x - h);
+        double derivative = (f_plus - f_minus) / (2 * h);
+        
+        visual << "Using central difference method:\n";
+        visual << "f'(" << formatNumber(x) << ") ≈ ";
+        visual << "[f(" << formatNumber(x + h) << ") - f(" << formatNumber(x - h) << ")] / (2 × " << h << ")\n";
+        visual << "f'(" << formatNumber(x) << ") ≈ (" << formatNumber(f_plus) << " - " 
+               << formatNumber(f_minus) << ") / " << formatNumber(2 * h) << "\n";
+        visual << "f'(" << formatNumber(x) << ") ≈ " << formatNumber(derivative) << "\n";
+        
+        steps.push_back({visual.str(), "", 0});
+        return formatNumber(derivative);
+    }
+    
+    std::vector<Step> getSteps() {
+        return steps;
+    }
+    
+    void clearSteps() {
+        steps.clear();
+    }
+};
